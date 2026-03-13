@@ -1,0 +1,407 @@
+import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
+import { toast } from 'sonner';
+import {
+  createUser,
+  listUsers,
+  resetUserPassword,
+  type UserListItem,
+} from '../../lib/api/userApi';
+import {
+  listTenants,
+  type PaginationMeta,
+  type Tenant,
+} from '../../lib/api/tenantApi';
+import { getApiErrorMessage } from '../../lib/utils/apiError';
+import DataTable from '../../components/common/DataTable';
+import Pagination from '../../components/common/Pagination';
+import TableSkeleton from '../../components/common/TableSkeleton';
+
+type UserFormState = {
+  tenantId: string;
+  username: string;
+  password: string;
+  name: string;
+  role: 'TENANT_ADMIN';
+};
+
+const initialForm: UserFormState = {
+  tenantId: '',
+  username: '',
+  password: '',
+  name: '',
+  role: 'TENANT_ADMIN',
+};
+
+type ResetPasswordModal = {
+  userId: string;
+  userName: string;
+  newPassword: string;
+};
+
+export default function UsersPage() {
+  const [form, setForm] = useState<UserFormState>(initialForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [items, setItems] = useState<UserListItem[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [loadingTable, setLoadingTable] = useState(false);
+  const [tableError, setTableError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [tenantFilter, setTenantFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<PaginationMeta>({
+    page: 1,
+    limit: 5,
+    total: 0,
+    totalPages: 1,
+  });
+  const [resetModal, setResetModal] = useState<ResetPasswordModal | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  const fetchTenants = async () => {
+    setLoadingTenants(true);
+    try {
+      const result = await listTenants({ page: 1, limit: 100 });
+      setTenants(result.items);
+    } catch (fetchError: unknown) {
+      const message = getApiErrorMessage(fetchError);
+      toast.error(`Gagal memuat daftar tenant: ${message}`);
+    } finally {
+      setLoadingTenants(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    setLoadingTable(true);
+    setTableError(null);
+
+    try {
+      const result = await listUsers({
+        page,
+        limit: meta.limit,
+        search: search || undefined,
+        tenantId: tenantFilter || undefined,
+      });
+      setItems(result.items);
+      setMeta(result.meta);
+    } catch (fetchError: unknown) {
+      const message = getApiErrorMessage(fetchError);
+      setTableError(message);
+      toast.error(message);
+    } finally {
+      setLoadingTable(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchTenants();
+  }, []);
+
+  useEffect(() => {
+    void fetchUsers();
+  }, [page, tenantFilter]);
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const created = await createUser({
+        tenantId: form.tenantId,
+        username: form.username,
+        password: form.password,
+        name: form.name,
+        role: form.role,
+      });
+
+      setSuccessMessage(
+        `User ${created.username ?? '-'} berhasil dibuat pada tenant ${created.tenant.name}`,
+      );
+      setForm(initialForm);
+      toast.success('Tenant user berhasil dibuat');
+      setPage(1);
+      await fetchUsers();
+    } catch (submitError: unknown) {
+      const message = getApiErrorMessage(submitError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const updateField = (field: keyof UserFormState, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value as UserFormState[typeof field] }));
+  };
+
+  const openResetModal = (user: UserListItem) => {
+    setResetModal({ userId: user.id, userName: user.name, newPassword: '' });
+  };
+
+  const closeResetModal = () => setResetModal(null);
+
+  const handleResetPassword = async () => {
+    if (!resetModal || !resetModal.newPassword) {
+      return;
+    }
+
+    if (resetModal.newPassword.length < 6) {
+      toast.error('Password baru minimal 6 karakter');
+      return;
+    }
+
+    setResetting(true);
+    try {
+      await resetUserPassword(resetModal.userId, resetModal.newPassword);
+      toast.success(`Password ${resetModal.userName} berhasil direset`);
+      closeResetModal();
+    } catch (resetError: unknown) {
+      toast.error(getApiErrorMessage(resetError));
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  return (
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-dark">Users</h1>
+        <p className="text-slate-600">
+          Daftarkan akun Owner/Admin pertama (username + password) untuk tenant yang sudah ada.
+        </p>
+      </div>
+
+      <form
+        onSubmit={onSubmit}
+        className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Tenant *</span>
+            <select
+              required
+              value={form.tenantId}
+              onChange={(event) => updateField('tenantId', event.target.value)}
+              disabled={loadingTenants}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            >
+              <option value="">-- Pilih Tenant --</option>
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Username *</span>
+            <input
+              required
+              value={form.username}
+              onChange={(event) =>
+                updateField('username', event.target.value.toLowerCase().replace(/\s+/g, ''))
+              }
+              placeholder="contoh: owner01"
+              pattern="^[a-z0-9._-]+$"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Full Name *</span>
+            <input
+              required
+              value={form.name}
+              onChange={(event) => updateField('name', event.target.value)}
+              placeholder="Nama lengkap pemilik toko"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Password *</span>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={form.password}
+              onChange={(event) => updateField('password', event.target.value)}
+              placeholder="Minimal 6 karakter"
+              autoComplete="new-password"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            />
+          </label>
+
+          <div className="space-y-1 md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Role</span>
+            <input
+              readOnly
+              value="Admin (TENANT_ADMIN)"
+              className="w-full cursor-not-allowed rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500"
+            />
+            <p className="text-xs text-slate-500">
+              Super Admin hanya membuat 1 akun Owner/Admin per perusahaan. Akun Kasir dan Auditor
+              dibuat langsung dari dalam aplikasi POS.
+            </p>
+          </div>
+        </div>
+
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {successMessage ? <p className="text-sm text-green-700">{successMessage}</p> : null}
+
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? 'Menyimpan...' : 'Create Tenant User'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPage(1);
+              void fetchUsers();
+            }}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+          >
+            Load Users
+          </button>
+        </div>
+      </form>
+
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <h2 className="text-lg font-semibold text-dark">Users</h2>
+          <div className="flex gap-2">
+            <select
+              value={tenantFilter}
+              onChange={(event) => {
+                setTenantFilter(event.target.value);
+                setPage(1);
+              }}
+              className="w-56 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/30 focus:ring"
+            >
+              <option value="">Pilih Tenant (Semua)</option>
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name}
+                </option>
+              ))}
+            </select>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Cari nama/username/tenant"
+              className="w-64 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/30 focus:ring"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setPage(1);
+                void fetchUsers();
+              }}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              Search
+            </button>
+          </div>
+        </div>
+
+        {loadingTable ? (
+          <TableSkeleton rows={5} columns={6} />
+        ) : (
+          <DataTable
+            headers={['Name', 'Username', 'Role', 'Tenant Name', 'Created At', 'Actions']}
+            hasData={items.length > 0}
+            emptyMessage={tableError ?? 'Belum ada user.'}
+          >
+            {items.map((user) => (
+              <tr key={user.id} className="hover:bg-slate-50/70">
+                <td className="px-4 py-3 font-medium text-dark">{user.name}</td>
+                <td className="px-4 py-3">{user.username ?? '-'}</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                    {user.role}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-slate-700">{user.tenant?.name ?? '-'}</td>
+                <td className="px-4 py-3 text-slate-500">
+                  {new Date(user.createdAt).toLocaleDateString()}
+                </td>
+                <td className="px-4 py-3">
+                  {user.role !== 'SUPER_ADMIN' ? (
+                    <button
+                      type="button"
+                      onClick={() => openResetModal(user)}
+                      title="Reset Password"
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                    >
+                      Reset Password
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </DataTable>
+        )}
+
+        <Pagination page={meta.page} totalPages={meta.totalPages} onPageChange={setPage} />
+      </div>
+
+      {resetModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-dark">Reset Password</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Atur password baru untuk <strong>{resetModal.userName}</strong>.
+            </p>
+
+            <div className="mt-4 space-y-2">
+              <label className="block text-sm font-medium text-slate-700">Password Baru *</label>
+              <input
+                type="password"
+                autoFocus
+                minLength={6}
+                placeholder="Minimal 6 karakter"
+                value={resetModal.newPassword}
+                onChange={(event) =>
+                  setResetModal((prev) =>
+                    prev ? { ...prev, newPassword: event.target.value } : null,
+                  )
+                }
+                autoComplete="new-password"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              />
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeResetModal}
+                disabled={resetting}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleResetPassword()}
+                disabled={resetting || !resetModal.newPassword}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resetting ? 'Menyimpan...' : 'Simpan Password Baru'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
