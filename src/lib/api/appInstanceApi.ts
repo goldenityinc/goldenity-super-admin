@@ -1,7 +1,7 @@
 import httpClient from './httpClient';
 import type { PaginationMeta } from './tenantApi';
 
-export type SubscriptionTier = 'Standard' | 'Professional' | 'Enterprise';
+export type SubscriptionTier = 'Standard' | 'Professional' | 'Enterprise' | 'Custom';
 export type AppInstanceStatus = 'ACTIVE' | 'SUSPENDED' | 'DEPLOYING';
 
 export type AppInstance = {

@@ -12,6 +12,7 @@ import {
   type AppInstanceStatus,
   type SubscriptionTier,
 } from '../../lib/api/appInstanceApi';
+import { getErpFeatureCatalog, provisionErp, type ErpFeatureDefinition } from '../../lib/api/integrationApi';
 import { listSolutions, type Solution } from '../../lib/api/solutionApi';
 import { listTenants, type PaginationMeta, type Tenant } from '../../lib/api/tenantApi';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
@@ -29,6 +30,18 @@ type FormState = {
   dbConnectionString: string;
   appUrl: string;
 };
+
+const ERP_SOLUTION_CODE = 'ERP' as const;
+
+const ERP_TIER_FEATURES: Record<'Standard' | 'Professional' | 'Enterprise', string[]> = {
+  Standard: ['crm', 'sales'],
+  Professional: ['crm', 'sales', 'inventory', 'purchasing'],
+  Enterprise: ['crm', 'sales', 'inventory', 'purchasing', 'accounting', 'hr'],
+};
+
+function isValidErpOrgIdCandidate(value: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(value) && value.length >= 2 && value.length <= 50;
+}
 
 const initialForm: FormState = {
   tenantId: '',
@@ -63,6 +76,10 @@ export default function AppInstancesPage() {
   const [editingItem, setEditingItem] = useState<AppInstance | null>(null);
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
+
+  const [erpFeatureCatalog, setErpFeatureCatalog] = useState<ErpFeatureDefinition[]>([]);
+  const [erpFeatureLoading, setErpFeatureLoading] = useState(false);
+  const [erpSelectedFeatures, setErpSelectedFeatures] = useState<string[]>([]);
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deletingItem, setDeletingItem] = useState<AppInstance | null>(null);
@@ -139,6 +156,7 @@ export default function AppInstancesPage() {
   const openCreateModal = () => {
     setEditingItem(null);
     setForm(initialForm);
+    setErpSelectedFeatures([]);
     setIsModalOpen(true);
   };
 
@@ -152,11 +170,73 @@ export default function AppInstancesPage() {
       dbConnectionString: item.dbConnectionString ?? '',
       appUrl: item.appUrl ?? '',
     });
+
+    setErpSelectedFeatures([]);
     setIsModalOpen(true);
   };
 
   const onChangeField = (field: keyof FormState, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value as FormState[typeof field] }));
+    setForm((prev) => {
+      const next = { ...prev, [field]: value as FormState[typeof field] };
+      if (field === 'tier' && value !== 'Custom') {
+        setErpSelectedFeatures([]);
+      }
+      if (field === 'solutionId' && value !== prev.solutionId) {
+        setErpSelectedFeatures([]);
+      }
+      return next;
+    });
+  };
+
+  const selectedSolution = solutions.find((s) => s.id === form.solutionId);
+  const isErpSolution = selectedSolution?.code === ERP_SOLUTION_CODE;
+  const canUseCustomTier = Boolean(isErpSolution);
+  const needsErpFeaturePicker = Boolean(isErpSolution && form.tier === 'Custom');
+
+  useEffect(() => {
+    const load = async () => {
+      if (!isModalOpen || !needsErpFeaturePicker) return;
+      if (erpFeatureCatalog.length) return;
+
+      setErpFeatureLoading(true);
+      try {
+        const features = await getErpFeatureCatalog();
+        setErpFeatureCatalog(features);
+      } catch (error: unknown) {
+        toast.error(`Gagal memuat daftar fitur ERP: ${getApiErrorMessage(error)}`);
+      } finally {
+        setErpFeatureLoading(false);
+      }
+    };
+
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isModalOpen, needsErpFeaturePicker]);
+
+  const toggleErpFeature = (key: string) => {
+    setErpSelectedFeatures((prev) => {
+      if (prev.includes(key)) return prev.filter((k) => k !== key);
+      return [...prev, key];
+    });
+  };
+
+  const applyErpFeaturesForTier = async (tier: SubscriptionTier) => {
+    if (!isErpSolution) return;
+
+    const tenant = tenants.find((t) => t.id === form.tenantId);
+    const organizationId = tenant?.slug && isValidErpOrgIdCandidate(tenant.slug) ? tenant.slug : undefined;
+
+    const features =
+      tier === 'Custom'
+        ? erpSelectedFeatures
+        : ERP_TIER_FEATURES[tier as 'Standard' | 'Professional' | 'Enterprise'];
+
+    await provisionErp({
+      tenantId: form.tenantId,
+      organizationId,
+      organizationName: tenant?.name,
+      features,
+    });
   };
 
   const getDbNamePreview = () => {
@@ -180,6 +260,17 @@ export default function AppInstancesPage() {
     setSubmitting(true);
 
     try {
+      // If ERP + Custom, ensure catalog loaded so admin isn't selecting blind.
+      if (needsErpFeaturePicker && !erpFeatureCatalog.length && !erpFeatureLoading) {
+        setErpFeatureLoading(true);
+        try {
+          const features = await getErpFeatureCatalog();
+          setErpFeatureCatalog(features);
+        } finally {
+          setErpFeatureLoading(false);
+        }
+      }
+
       if (editingItem) {
         await updateAppInstance(editingItem.id, {
           tier: form.tier,
@@ -187,9 +278,13 @@ export default function AppInstancesPage() {
           dbConnectionString: form.dbConnectionString || null,
           appUrl: form.appUrl || null,
         });
+
+        if (isErpSolution) {
+          await applyErpFeaturesForTier(form.tier);
+        }
         toast.success('Subscription berhasil diupdate');
       } else {
-        await createAppInstance({
+        const created = await createAppInstance({
           tenantId: form.tenantId,
           solutionId: form.solutionId,
           tier: form.tier,
@@ -197,6 +292,20 @@ export default function AppInstancesPage() {
           dbConnectionString: form.dbConnectionString || null,
           appUrl: form.appUrl || null,
         });
+
+        try {
+          if (isErpSolution) {
+            await applyErpFeaturesForTier(form.tier);
+          }
+        } catch (error: unknown) {
+          // Avoid partial state where subscription exists but ERP provisioning/features failed.
+          try {
+            await deleteAppInstance(created.id);
+          } catch {
+            // ignore rollback failure
+          }
+          throw error;
+        }
         toast.success('Subscription berhasil dibuat');
       }
 
@@ -229,10 +338,22 @@ export default function AppInstancesPage() {
     }
   };
 
-  const onSaveTier = async (itemId: string, nextTier: SubscriptionTier) => {
-    setSavingTierId(itemId);
+  const onSaveTier = async (item: AppInstance, nextTier: SubscriptionTier) => {
+    setSavingTierId(item.id);
     try {
-      await updateSubscriptionTier(itemId, nextTier);
+      await updateSubscriptionTier(item.id, nextTier);
+
+      if (item.solution.code === ERP_SOLUTION_CODE && nextTier !== 'Custom') {
+        const tenant = tenants.find((t) => t.id === item.tenantId);
+        const organizationId = tenant?.slug && isValidErpOrgIdCandidate(tenant.slug) ? tenant.slug : undefined;
+        await provisionErp({
+          tenantId: item.tenantId,
+          organizationId,
+          organizationName: tenant?.name,
+          features: ERP_TIER_FEATURES[nextTier],
+        });
+      }
+
       toast.success('Tier subscription berhasil diupdate');
       await Promise.all([fetchAppInstances(), fetchTenantSubscriptions(selectedTenantId)]);
     } catch (error: unknown) {
@@ -322,7 +443,7 @@ export default function AppInstancesPage() {
                     <button
                       type="button"
                       disabled={savingTierId === item.id}
-                      onClick={() => onSaveTier(item.id, item.tier)}
+                      onClick={() => onSaveTier(item, item.tier)}
                       className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {savingTierId === item.id ? 'Saving...' : 'Save Tier'}
@@ -463,6 +584,7 @@ export default function AppInstancesPage() {
                 <option value="Standard">Standard</option>
                 <option value="Professional">Professional</option>
                 <option value="Enterprise">Enterprise</option>
+                {canUseCustomTier ? <option value="Custom">Custom</option> : null}
               </select>
             </label>
 
@@ -480,6 +602,39 @@ export default function AppInstancesPage() {
               </select>
             </label>
           </div>
+
+          {needsErpFeaturePicker ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-dark">ERP Features (Custom)</p>
+              {erpFeatureLoading ? (
+                <p className="text-sm text-slate-600">Loading fitur...</p>
+              ) : erpFeatureCatalog.length === 0 ? (
+                <p className="text-sm text-slate-600">Daftar fitur belum tersedia.</p>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {erpFeatureCatalog.map((f) => (
+                    <label
+                      key={f.key}
+                      className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={erpSelectedFeatures.includes(f.key)}
+                        onChange={() => toggleErpFeature(f.key)}
+                        className="mt-1"
+                      />
+                      <span className="block">
+                        <span className="block text-sm font-medium text-dark">{f.label}</span>
+                        {f.description ? (
+                          <span className="block text-xs text-slate-500">{f.description}</span>
+                        ) : null}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
 
           <label className="space-y-1">
             <span className="text-sm font-medium text-slate-700">DB Connection String</span>
