@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import {
   createTenant,
   listTenants,
+  uploadTenantLogo,
   type PaginationMeta,
   type Tenant,
 } from '../../lib/api/tenantApi';
@@ -18,7 +19,7 @@ type TenantFormState = {
   email: string;
   phone: string;
   address: string;
-  logoUrl: string;
+  logoFile: File | null;
 };
 
 const initialForm: TenantFormState = {
@@ -27,7 +28,7 @@ const initialForm: TenantFormState = {
   email: '',
   phone: '',
   address: '',
-  logoUrl: '',
+  logoFile: null,
 };
 
 export default function TenantsPage() {
@@ -85,8 +86,11 @@ export default function TenantsPage() {
         email: form.email || undefined,
         phone: form.phone || undefined,
         address: form.address || undefined,
-        logoUrl: form.logoUrl || undefined,
       });
+
+      if (form.logoFile) {
+        await uploadTenantLogo(createdTenantResult.tenant.id, form.logoFile);
+      }
 
       setLastCreatedTenant(createdTenantResult.tenant);
       setForm(initialForm);
@@ -104,6 +108,10 @@ export default function TenantsPage() {
 
   const updateField = (field: keyof TenantFormState, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateLogoFile = (file: File | null) => {
+    setForm((prev) => ({ ...prev, logoFile: file }));
   };
 
   return (
@@ -155,13 +163,17 @@ export default function TenantsPage() {
           </label>
 
           <label className="space-y-1 md:col-span-2">
-            <span className="text-sm font-medium text-slate-700">Company Logo URL</span>
+            <span className="text-sm font-medium text-slate-700">Company Logo</span>
             <input
-              value={form.logoUrl}
-              onChange={(event) => updateField('logoUrl', event.target.value)}
-              placeholder="https://.../logo.png"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                updateLogoFile(file);
+              }}
               className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
             />
+            <p className="text-xs text-slate-500">Maks 2MB. Format: png/jpg/webp/svg.</p>
           </label>
         </div>
 

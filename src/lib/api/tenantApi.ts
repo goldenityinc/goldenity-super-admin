@@ -13,7 +13,6 @@ export type CreateTenantPayload = {
   email?: string;
   phone?: string;
   address?: string;
-  logoUrl?: string;
 };
 
 export type TenantFirstAdminCredential = {
@@ -56,4 +55,15 @@ export async function listTenants(params: {
     items: response.data.data as Tenant[],
     meta: response.data.meta as PaginationMeta,
   };
+}
+
+export async function uploadTenantLogo(tenantId: string, file: File): Promise<{ tenantId: string; logoUrl: string }> {
+  const form = new FormData();
+  form.append('file', file);
+
+  const response = await httpClient.post(`/tenants/${encodeURIComponent(tenantId)}/logo`, form, {
+    headers: { 'content-type': 'multipart/form-data' },
+  });
+
+  return response.data?.data as { tenantId: string; logoUrl: string };
 }
