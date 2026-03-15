@@ -277,6 +277,46 @@ export default function AppInstancesPage() {
     });
   };
 
+  const getSolutionButtonClasses = (solutionCode: string) => {
+    const base =
+      'rounded-md px-2.5 py-1 text-xs font-semibold border transition-colors focus:outline-none focus:ring ring-primary/30';
+
+    if (solutionCode === 'ERP') {
+      return `${base} border-primary/20 bg-primary/10 text-primary hover:bg-primary/15`;
+    }
+
+    if (solutionCode === 'POS') {
+      return `${base} border-emerald-200 bg-emerald-100 text-emerald-700 hover:bg-emerald-200/60`;
+    }
+
+    if (solutionCode === 'CLINIC') {
+      return `${base} border-amber-200 bg-amber-100 text-amber-700 hover:bg-amber-200/60`;
+    }
+
+    return `${base} border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200/60`;
+  };
+
+  const openSolutionApp = (item: AppInstance) => {
+    const code = item.solution.code;
+    if (!item.appUrl) {
+      toast.error('App URL belum tersedia untuk subscription ini.');
+      return;
+    }
+
+    let urlToOpen = item.appUrl;
+    if (code === 'ERP') {
+      try {
+        const origin = new URL(item.appUrl).origin;
+        urlToOpen = `${origin}/t/${item.tenant.slug}/login`;
+      } catch {
+        toast.error('App URL tidak valid untuk subscription ERP ini.');
+        return;
+      }
+    }
+
+    window.open(urlToOpen, '_blank', 'noopener,noreferrer');
+  };
+
   const getDbNamePreview = () => {
     if (form.dbConnectionString.trim() !== '') {
       return null;
@@ -327,8 +367,6 @@ export default function AppInstancesPage() {
           solutionId: form.solutionId,
           tier: form.tier,
           status: form.status,
-          dbConnectionString: form.dbConnectionString || null,
-          appUrl: form.appUrl || null,
         });
 
         try {
@@ -408,7 +446,7 @@ export default function AppInstancesPage() {
         <div>
           <h1 className="text-2xl font-semibold text-dark">Subscriptions</h1>
           <p className="text-slate-600">
-            Atur langganan tenant ke masing-masing solution termasuk tier, status, dan koneksi database.
+            Atur langganan tenant ke masing-masing solution termasuk tier dan status.
           </p>
         </div>
 
@@ -536,6 +574,14 @@ export default function AppInstancesPage() {
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openSolutionApp(item)}
+                    className={getSolutionButtonClasses(item.solution.code)}
+                    title={`Buka ${item.solution.code}`}
+                  >
+                    {item.solution.code}
+                  </button>
                   <button
                     type="button"
                     onClick={() => openEditModal(item)}
@@ -678,30 +724,34 @@ export default function AppInstancesPage() {
             </div>
           ) : null}
 
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">DB Connection String</span>
-            <input
-              value={form.dbConnectionString}
-              onChange={(event) => onChangeField('dbConnectionString', event.target.value)}
-              placeholder="postgresql://user:pass@host:port/db"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-            />
-            {getDbNamePreview() ? (
-              <p className="text-xs text-slate-500">{`Preview: ${getDbNamePreview()}`}</p>
-            ) : (
-              <p className="text-xs text-slate-500">Kosongkan untuk auto-generate kredensial database.</p>
-            )}
-          </label>
+          {editingItem ? (
+            <>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-slate-700">DB Connection String</span>
+                <input
+                  value={form.dbConnectionString}
+                  onChange={(event) => onChangeField('dbConnectionString', event.target.value)}
+                  placeholder="postgresql://user:pass@host:port/db"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+                />
+                {getDbNamePreview() ? (
+                  <p className="text-xs text-slate-500">{`Preview: ${getDbNamePreview()}`}</p>
+                ) : (
+                  <p className="text-xs text-slate-500">Kosongkan untuk auto-generate kredensial database.</p>
+                )}
+              </label>
 
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">App URL</span>
-            <input
-              value={form.appUrl}
-              onChange={(event) => onChangeField('appUrl', event.target.value)}
-              placeholder="https://client-app.yourdomain.com"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-            />
-          </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-slate-700">App URL</span>
+                <input
+                  value={form.appUrl}
+                  onChange={(event) => onChangeField('appUrl', event.target.value)}
+                  placeholder="https://client-app.yourdomain.com"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+                />
+              </label>
+            </>
+          ) : null}
 
           <div className="flex justify-end gap-2">
             <button
