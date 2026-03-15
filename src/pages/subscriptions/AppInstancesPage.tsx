@@ -34,6 +34,7 @@ type FormState = {
   status: AppInstanceStatus;
   dbConnectionString: string;
   appUrl: string;
+  logoUrl: string;
 };
 
 const ERP_SOLUTION_CODE = 'ERP' as const;
@@ -58,6 +59,7 @@ const initialForm: FormState = {
   status: 'ACTIVE',
   dbConnectionString: '',
   appUrl: '',
+  logoUrl: '',
 };
 
 export default function AppInstancesPage() {
@@ -178,6 +180,7 @@ export default function AppInstancesPage() {
       status: item.status,
       dbConnectionString: item.dbConnectionString ?? '',
       appUrl: item.appUrl ?? '',
+      logoUrl: '',
     });
 
     // Preload happens via effect when ERP + Custom.
@@ -277,6 +280,7 @@ export default function AppInstancesPage() {
       organizationId,
       organizationName: tenant?.name,
       features,
+      logoUrl: form.logoUrl.trim() || undefined,
     });
   };
 
@@ -698,6 +702,19 @@ export default function AppInstancesPage() {
               </select>
             </label>
           </div>
+
+          {isErpSolution ? (
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Company Logo URL (ERP)</span>
+              <input
+                value={form.logoUrl}
+                onChange={(event) => onChangeField('logoUrl', event.target.value)}
+                placeholder="https://.../logo.png"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              />
+              <p className="text-xs text-slate-500">URL gambar logo yang akan di-sync ke ERP Company Info.</p>
+            </label>
+          ) : null}
 
           {needsErpFeaturePicker ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">

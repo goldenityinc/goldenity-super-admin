@@ -17,6 +17,7 @@ export async function provisionErp(input: {
   organizationId?: string;
   organizationName?: string;
   features?: string[];
+  logoUrl?: string;
 }): Promise<unknown> {
   const response = await httpClient.post('/integrations/erp/provision', input);
   return response.data?.data;
