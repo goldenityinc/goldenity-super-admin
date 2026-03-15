@@ -37,6 +37,9 @@ type FormState = {
 };
 
 const ERP_SOLUTION_CODE = 'ERP' as const;
+const ERP_WEB_ORIGIN = (import.meta.env.VITE_ERP_WEB_ORIGIN as string | undefined) ?? '';
+const POS_WEB_ORIGIN = (import.meta.env.VITE_POS_WEB_ORIGIN as string | undefined) ?? '';
+const CLINIC_WEB_ORIGIN = (import.meta.env.VITE_CLINIC_WEB_ORIGIN as string | undefined) ?? '';
 
 const ERP_TIER_FEATURES: Record<'Standard' | 'Professional' | 'Enterprise', string[]> = {
   Standard: ['crm', 'sales'],
@@ -298,21 +301,35 @@ export default function AppInstancesPage() {
 
   const openSolutionApp = (item: AppInstance) => {
     const code = item.solution.code;
-    if (!item.appUrl) {
-      toast.error('App URL belum tersedia untuk subscription ini.');
+    const configuredOrigin =
+      code === 'ERP'
+        ? ERP_WEB_ORIGIN
+        : code === 'POS'
+          ? POS_WEB_ORIGIN
+          : code === 'CLINIC'
+            ? CLINIC_WEB_ORIGIN
+            : '';
+
+    let origin = configuredOrigin.trim();
+    if (!origin && item.appUrl) {
+      try {
+        origin = new URL(item.appUrl).origin;
+      } catch {
+        // ignore invalid appUrl, we'll show an error below
+      }
+    }
+
+    if (!origin) {
+      toast.error(
+        code === 'ERP'
+          ? 'ERP Web Origin belum dikonfigurasi. Set VITE_ERP_WEB_ORIGIN di Vercel.'
+          : 'Web Origin belum dikonfigurasi untuk subscription ini.',
+      );
       return;
     }
 
-    let urlToOpen = item.appUrl;
-    if (code === 'ERP') {
-      try {
-        const origin = new URL(item.appUrl).origin;
-        urlToOpen = `${origin}/t/${item.tenant.slug}/login`;
-      } catch {
-        toast.error('App URL tidak valid untuk subscription ERP ini.');
-        return;
-      }
-    }
+    const urlToOpen =
+      code === 'ERP' ? `${origin}/t/${item.tenant.slug}/login` : item.appUrl ?? origin;
 
     window.open(urlToOpen, '_blank', 'noopener,noreferrer');
   };
@@ -534,10 +551,10 @@ export default function AppInstancesPage() {
       </div>
 
       {loadingTable ? (
-        <TableSkeleton rows={6} columns={6} />
+        <TableSkeleton rows={6} columns={5} />
       ) : (
         <DataTable
-          headers={['Client', 'Solution', 'Tier', 'Status', 'App URL', 'Actions']}
+          headers={['Client', 'Solution', 'Tier', 'Status', 'Actions']}
           hasData={items.length > 0}
           emptyMessage={tableError ?? 'Belum ada subscription/app instance.'}
         >
@@ -566,9 +583,6 @@ export default function AppInstancesPage() {
                 >
                   {item.status}
                 </span>
-              </td>
-              <td className="max-w-[260px] truncate px-4 py-3 text-slate-600" title={item.appUrl ?? '-'}>
-                {item.appUrl ?? '-'}
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
