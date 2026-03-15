@@ -1,4 +1,4 @@
-import { Home, Building2, Users, Layers3, Link2, Settings, Menu, X, LogOut } from 'lucide-react';
+import { Home, Building2, Users, Layers3, Link2, Settings, Menu, X, LogOut, Download } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentType } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
@@ -17,6 +17,7 @@ const menuItems: SidebarItem[] = [
   { to: '/solutions', label: 'Solutions', icon: Layers3 },
   { to: '/subscriptions', label: 'Subscriptions', icon: Link2 },
   { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/downloads', label: 'Downloads', icon: Download },
 ];
 
 export default function AdminLayout() {

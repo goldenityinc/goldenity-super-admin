@@ -5,6 +5,8 @@ import {
   createUser,
   listUsers,
   resetUserPassword,
+  toggleUserActive,
+  deleteUser,
   type UserListItem,
 } from '../../lib/api/userApi';
 import {
@@ -16,6 +18,7 @@ import { getApiErrorMessage } from '../../lib/utils/apiError';
 import DataTable from '../../components/common/DataTable';
 import Pagination from '../../components/common/Pagination';
 import TableSkeleton from '../../components/common/TableSkeleton';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
 
 type UserFormState = {
   tenantId: string;
@@ -60,6 +63,9 @@ export default function UsersPage() {
   });
   const [resetModal, setResetModal] = useState<ResetPasswordModal | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<UserListItem | null>(null);
 
   const fetchTenants = async () => {
     setLoadingTenants(true);
@@ -85,12 +91,17 @@ export default function UsersPage() {
         search: search || undefined,
         tenantId: tenantFilter || undefined,
       });
+      if (!Array.isArray(result.items)) {
+        console.error('[fetchUsers] Unexpected response shape:', result);
+        throw new Error('Format respons tidak valid dari server.');
+      }
       setItems(result.items);
       setMeta(result.meta);
     } catch (fetchError: unknown) {
       const message = getApiErrorMessage(fetchError);
+      console.error('[fetchUsers] Error:', message, fetchError);
       setTableError(message);
-      toast.error(message);
+      toast.error(`Gagal memuat users: ${message}`);
     } finally {
       setLoadingTable(false);
     }
@@ -130,6 +141,14 @@ export default function UsersPage() {
       const message = getApiErrorMessage(submitError);
       setError(message);
       toast.error(message);
+      // Jika error duplicate, arahkan filter ke tenant yang sedang dipilih
+      // agar user existing langsung terlihat di tabel.
+      if (form.tenantId && tenantFilter !== form.tenantId) {
+        setTenantFilter(form.tenantId);
+        setPage(1);
+      } else {
+        void fetchUsers();
+      }
     } finally {
       setSubmitting(false);
     }
@@ -141,6 +160,38 @@ export default function UsersPage() {
 
   const openResetModal = (user: UserListItem) => {
     setResetModal({ userId: user.id, userName: user.name, newPassword: '' });
+  };
+
+  const handleToggleActive = async (user: UserListItem) => {
+    setTogglingId(user.id);
+    try {
+      const updated = await toggleUserActive(user.id, !user.isActive);
+      setItems((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+      toast.success(
+        updated.isActive
+          ? `${user.name} berhasil diaktifkan`
+          : `${user.name} berhasil dinonaktifkan`,
+      );
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteConfirm) return;
+    setDeletingId(deleteConfirm.id);
+    try {
+      await deleteUser(deleteConfirm.id);
+      toast.success(`User ${deleteConfirm.name} berhasil dihapus`);
+      setDeleteConfirm(null);
+      setItems((prev) => prev.filter((u) => u.id !== deleteConfirm.id));
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const closeResetModal = () => setResetModal(null);
@@ -337,14 +388,42 @@ export default function UsersPage() {
                 </td>
                 <td className="px-4 py-3">
                   {user.role !== 'SUPER_ADMIN' ? (
-                    <button
-                      type="button"
-                      onClick={() => openResetModal(user)}
-                      title="Reset Password"
-                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
-                    >
-                      Reset Password
-                    </button>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openResetModal(user)}
+                        title="Reset Password"
+                        className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                      >
+                        Reset Password
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleToggleActive(user)}
+                        disabled={togglingId === user.id}
+                        title={user.isActive ? 'Deactivate user' : 'Activate user'}
+                        className={[
+                          'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                          user.isActive
+                            ? 'border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                            : 'border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200',
+                        ].join(' ')}
+                      >
+                        {togglingId === user.id
+                          ? '...'
+                          : user.isActive
+                            ? 'Deactivate'
+                            : 'Activate'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirm(user)}
+                        title="Hapus user"
+                        className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   ) : null}
                 </td>
               </tr>
@@ -402,6 +481,18 @@ export default function UsersPage() {
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        isOpen={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => void handleDeleteUser()}
+        title="Hapus User"
+        message={`Apakah Anda yakin ingin menghapus user "${deleteConfirm?.name ?? ''}" secara permanen? Aksi ini tidak dapat dibatalkan.`}
+        confirmText="Ya, Hapus"
+        cancelText="Batal"
+        variant="danger"
+        isLoading={deletingId !== null}
+      />
     </section>
   );
 }

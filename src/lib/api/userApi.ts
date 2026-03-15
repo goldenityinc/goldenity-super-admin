@@ -36,10 +36,34 @@ export async function listUsers(params: {
   search?: string;
   tenantId?: string;
 }): Promise<{ items: UserListItem[]; meta: PaginationMeta }> {
-  const response = await httpClient.get('/users', { params });
+  const response = await httpClient.get('/users', {
+    params: {
+      ...params,
+      // Backward-compatible alias if backend expects snake_case.
+      tenant_id: params.tenantId,
+    },
+  });
+
+  const payload = response.data as {
+    data?: unknown;
+    items?: unknown;
+    meta?: PaginationMeta;
+  };
+
+  const items = Array.isArray(payload.data)
+    ? (payload.data as UserListItem[])
+    : Array.isArray(payload.items)
+      ? (payload.items as UserListItem[])
+      : [];
+
   return {
-    items: response.data.data as UserListItem[],
-    meta: response.data.meta as PaginationMeta,
+    items,
+    meta: payload.meta ?? {
+      page: params.page,
+      limit: params.limit,
+      total: items.length,
+      totalPages: Math.max(1, Math.ceil(items.length / params.limit)),
+    },
   };
 }
 
@@ -48,4 +72,16 @@ export async function resetUserPassword(
   newPassword: string,
 ): Promise<void> {
   await httpClient.patch(`/users/${userId}/reset-password`, { newPassword });
+}
+
+export async function toggleUserActive(
+  userId: string,
+  isActive: boolean,
+): Promise<UserListItem> {
+  const response = await httpClient.patch(`/users/${userId}/status`, { isActive });
+  return response.data.data as UserListItem;
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await httpClient.delete(`/users/${userId}`);
 }

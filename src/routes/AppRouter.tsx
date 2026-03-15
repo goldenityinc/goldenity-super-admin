@@ -7,6 +7,7 @@ import UsersPage from '../pages/users/UsersPage';
 import SolutionsPage from '../pages/solutions/SolutionsPage';
 import AppInstancesPage from '../pages/subscriptions/AppInstancesPage';
 import SettingsPage from '../pages/settings/SettingsPage';
+import DownloadsPage from '../pages/downloads/DownloadsPage';
 import LoginPage from '../pages/auth/LoginPage';
 import UnauthorizedPage from '../pages/auth/UnauthorizedPage';
 import { useAuth } from '../context/AuthContext';
@@ -53,6 +54,7 @@ export default function AppRouter() {
         <Route path="solutions" element={<SolutionsPage />} />
         <Route path="subscriptions" element={<AppInstancesPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="downloads" element={<DownloadsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
