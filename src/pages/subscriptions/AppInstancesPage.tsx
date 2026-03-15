@@ -561,9 +561,7 @@ export default function AppInstancesPage() {
                     'rounded-full px-2 py-1 text-xs font-semibold',
                     item.status === 'ACTIVE'
                       ? 'bg-emerald-100 text-emerald-700'
-                      : item.status === 'DEPLOYING'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-red-100 text-red-700',
+                      : 'bg-red-100 text-red-700',
                   ].join(' ')}
                 >
                   {item.status}
@@ -681,9 +679,6 @@ export default function AppInstancesPage() {
                 onChange={(event) => onChangeField('status', event.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
               >
-                {editingItem || form.status === 'DEPLOYING' ? (
-                  <option value="DEPLOYING">DEPLOYING</option>
-                ) : null}
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="SUSPENDED">SUSPENDED</option>
               </select>
