@@ -18,6 +18,7 @@ type TenantFormState = {
   email: string;
   phone: string;
   address: string;
+  logoUrl: string;
 };
 
 const initialForm: TenantFormState = {
@@ -26,6 +27,7 @@ const initialForm: TenantFormState = {
   email: '',
   phone: '',
   address: '',
+  logoUrl: '',
 };
 
 export default function TenantsPage() {
@@ -83,6 +85,7 @@ export default function TenantsPage() {
         email: form.email || undefined,
         phone: form.phone || undefined,
         address: form.address || undefined,
+        logoUrl: form.logoUrl || undefined,
       });
 
       setLastCreatedTenant(createdTenantResult.tenant);
@@ -147,6 +150,16 @@ export default function TenantsPage() {
             <input
               value={form.phone}
               onChange={(event) => updateField('phone', event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            />
+          </label>
+
+          <label className="space-y-1 md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Company Logo URL</span>
+            <input
+              value={form.logoUrl}
+              onChange={(event) => updateField('logoUrl', event.target.value)}
+              placeholder="https://.../logo.png"
               className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
             />
           </label>
