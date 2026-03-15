@@ -12,7 +12,12 @@ import {
   type AppInstanceStatus,
   type SubscriptionTier,
 } from '../../lib/api/appInstanceApi';
-import { getErpFeatureCatalog, provisionErp, type ErpFeatureDefinition } from '../../lib/api/integrationApi';
+import {
+  getErpFeatureCatalog,
+  getErpOrganizationEnabledFeatures,
+  provisionErp,
+  type ErpFeatureDefinition,
+} from '../../lib/api/integrationApi';
 import { listSolutions, type Solution } from '../../lib/api/solutionApi';
 import { listTenants, type PaginationMeta, type Tenant } from '../../lib/api/tenantApi';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
@@ -80,6 +85,7 @@ export default function AppInstancesPage() {
   const [erpFeatureCatalog, setErpFeatureCatalog] = useState<ErpFeatureDefinition[]>([]);
   const [erpFeatureLoading, setErpFeatureLoading] = useState(false);
   const [erpSelectedFeatures, setErpSelectedFeatures] = useState<string[]>([]);
+  const [erpPrefillLoading, setErpPrefillLoading] = useState(false);
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deletingItem, setDeletingItem] = useState<AppInstance | null>(null);
@@ -171,6 +177,7 @@ export default function AppInstancesPage() {
       appUrl: item.appUrl ?? '',
     });
 
+    // Preload happens via effect when ERP + Custom.
     setErpSelectedFeatures([]);
     setIsModalOpen(true);
   };
@@ -193,6 +200,13 @@ export default function AppInstancesPage() {
   const canUseCustomTier = Boolean(isErpSolution);
   const needsErpFeaturePicker = Boolean(isErpSolution && form.tier === 'Custom');
 
+  const resolveErpOrganizationId = () => {
+    const fromEditing = editingItem?.tenant?.slug;
+    const fromRefs = tenants.find((t) => t.id === form.tenantId)?.slug;
+    const slug = (fromEditing ?? fromRefs ?? '').trim();
+    return slug && isValidErpOrgIdCandidate(slug) ? slug : undefined;
+  };
+
   useEffect(() => {
     const load = async () => {
       if (!isModalOpen || !needsErpFeaturePicker) return;
@@ -213,6 +227,30 @@ export default function AppInstancesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isModalOpen, needsErpFeaturePicker]);
 
+  useEffect(() => {
+    const prefill = async () => {
+      if (!isModalOpen || !needsErpFeaturePicker) return;
+      if (!editingItem) return;
+      if (erpSelectedFeatures.length > 0) return;
+
+      const organizationId = resolveErpOrganizationId();
+      if (!organizationId) return;
+
+      setErpPrefillLoading(true);
+      try {
+        const enabled = await getErpOrganizationEnabledFeatures(organizationId);
+        setErpSelectedFeatures(enabled);
+      } catch (error: unknown) {
+        toast.error(`Gagal memuat fitur aktif ERP: ${getApiErrorMessage(error)}`);
+      } finally {
+        setErpPrefillLoading(false);
+      }
+    };
+
+    void prefill();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isModalOpen, needsErpFeaturePicker, editingItem?.id]);
+
   const toggleErpFeature = (key: string) => {
     setErpSelectedFeatures((prev) => {
       if (prev.includes(key)) return prev.filter((k) => k !== key);
@@ -224,7 +262,7 @@ export default function AppInstancesPage() {
     if (!isErpSolution) return;
 
     const tenant = tenants.find((t) => t.id === form.tenantId);
-    const organizationId = tenant?.slug && isValidErpOrgIdCandidate(tenant.slug) ? tenant.slug : undefined;
+    const organizationId = resolveErpOrganizationId();
 
     const features =
       tier === 'Custom'
@@ -344,12 +382,13 @@ export default function AppInstancesPage() {
       await updateSubscriptionTier(item.id, nextTier);
 
       if (item.solution.code === ERP_SOLUTION_CODE && nextTier !== 'Custom') {
-        const tenant = tenants.find((t) => t.id === item.tenantId);
-        const organizationId = tenant?.slug && isValidErpOrgIdCandidate(tenant.slug) ? tenant.slug : undefined;
+        const organizationId = item.tenant.slug && isValidErpOrgIdCandidate(item.tenant.slug)
+          ? item.tenant.slug
+          : undefined;
         await provisionErp({
           tenantId: item.tenantId,
           organizationId,
-          organizationName: tenant?.name,
+          organizationName: item.tenant.name,
           features: ERP_TIER_FEATURES[nextTier],
         });
       }
@@ -606,6 +645,9 @@ export default function AppInstancesPage() {
           {needsErpFeaturePicker ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-semibold text-dark">ERP Features (Custom)</p>
+              {erpPrefillLoading ? (
+                <p className="text-sm text-slate-600">Memuat fitur aktif...</p>
+              ) : null}
               {erpFeatureLoading ? (
                 <p className="text-sm text-slate-600">Loading fitur...</p>
               ) : erpFeatureCatalog.length === 0 ? (

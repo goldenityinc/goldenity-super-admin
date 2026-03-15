@@ -22,6 +22,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 
 type UserFormState = {
   tenantId: string;
+  email: string;
   username: string;
   password: string;
   name: string;
@@ -30,6 +31,7 @@ type UserFormState = {
 
 const initialForm: UserFormState = {
   tenantId: '',
+  email: '',
   username: '',
   password: '',
   name: '',
@@ -122,16 +124,22 @@ export default function UsersPage() {
     setSuccessMessage(null);
 
     try {
+      const normalizedEmail = form.email.trim().toLowerCase();
+      const normalizedUsername = form.username
+        ? form.username.toLowerCase().replace(/\s+/g, '')
+        : '';
+
       const created = await createUser({
         tenantId: form.tenantId,
-        username: form.username,
+        email: normalizedEmail,
+        ...(normalizedUsername ? { username: normalizedUsername } : {}),
         password: form.password,
         name: form.name,
         role: form.role,
       });
 
       setSuccessMessage(
-        `User ${created.username ?? '-'} berhasil dibuat pada tenant ${created.tenant.name}`,
+        `User ${created.email ?? created.username ?? '-'} berhasil dibuat pada tenant ${created.tenant.name}`,
       );
       setForm(initialForm);
       toast.success('Tenant user berhasil dibuat');
@@ -223,7 +231,7 @@ export default function UsersPage() {
       <div>
         <h1 className="text-2xl font-semibold text-dark">Users</h1>
         <p className="text-slate-600">
-          Daftarkan akun Owner/Admin pertama (username + password) untuk tenant yang sudah ada.
+          Daftarkan akun Owner/Admin pertama (email + password) untuk tenant yang sudah ada.
         </p>
       </div>
 
@@ -251,9 +259,21 @@ export default function UsersPage() {
           </label>
 
           <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">Username *</span>
+            <span className="text-sm font-medium text-slate-700">Email *</span>
             <input
               required
+              type="email"
+              value={form.email}
+              onChange={(event) => updateField('email', event.target.value)}
+              placeholder="contoh: owner@company.com"
+              autoComplete="email"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Username (opsional)</span>
+            <input
               value={form.username}
               onChange={(event) =>
                 updateField('username', event.target.value.toLowerCase().replace(/\s+/g, ''))
@@ -280,10 +300,10 @@ export default function UsersPage() {
             <input
               type="password"
               required
-              minLength={6}
+              minLength={8}
               value={form.password}
               onChange={(event) => updateField('password', event.target.value)}
-              placeholder="Minimal 6 karakter"
+              placeholder="Minimal 8 karakter"
               autoComplete="new-password"
               className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
             />
@@ -349,7 +369,7 @@ export default function UsersPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari nama/username/tenant"
+              placeholder="Cari nama/username/email/tenant"
               className="w-64 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/30 focus:ring"
             />
             <button
@@ -366,10 +386,10 @@ export default function UsersPage() {
         </div>
 
         {loadingTable ? (
-          <TableSkeleton rows={5} columns={6} />
+          <TableSkeleton rows={5} columns={7} />
         ) : (
           <DataTable
-            headers={['Name', 'Username', 'Role', 'Tenant Name', 'Created At', 'Actions']}
+            headers={['Name', 'Username', 'Email', 'Role', 'Tenant Name', 'Created At', 'Actions']}
             hasData={items.length > 0}
             emptyMessage={tableError ?? 'Belum ada user.'}
           >
@@ -377,6 +397,7 @@ export default function UsersPage() {
               <tr key={user.id} className="hover:bg-slate-50/70">
                 <td className="px-4 py-3 font-medium text-dark">{user.name}</td>
                 <td className="px-4 py-3">{user.username ?? '-'}</td>
+                <td className="px-4 py-3">{user.email ?? '-'}</td>
                 <td className="px-4 py-3">
                   <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
                     {user.role}

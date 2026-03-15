@@ -3,7 +3,6 @@ import type { FormEvent } from 'react';
 import { toast } from 'sonner';
 import {
   createTenant,
-  type TenantFirstAdminCredential,
   listTenants,
   type PaginationMeta,
   type Tenant,
@@ -19,8 +18,6 @@ type TenantFormState = {
   email: string;
   phone: string;
   address: string;
-  adminEmail: string;
-  adminPassword: string;
 };
 
 const initialForm: TenantFormState = {
@@ -29,31 +26,13 @@ const initialForm: TenantFormState = {
   email: '',
   phone: '',
   address: '',
-  adminEmail: '',
-  adminPassword: '',
 };
-
-type TenantCreationResult = {
-  tenant: Tenant;
-  firstAdmin: TenantFirstAdminCredential;
-};
-
-function generateStrongPassword(length = 12) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
-  let value = '';
-
-  for (let index = 0; index < length; index += 1) {
-    value += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-
-  return value;
-}
 
 export default function TenantsPage() {
   const [form, setForm] = useState<TenantFormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastCreatedTenant, setLastCreatedTenant] = useState<TenantCreationResult | null>(null);
+  const [lastCreatedTenant, setLastCreatedTenant] = useState<Tenant | null>(null);
 
   const [items, setItems] = useState<Tenant[]>([]);
   const [loadingTable, setLoadingTable] = useState(false);
@@ -104,11 +83,9 @@ export default function TenantsPage() {
         email: form.email || undefined,
         phone: form.phone || undefined,
         address: form.address || undefined,
-        adminEmail: form.adminEmail,
-        adminPassword: form.adminPassword,
       });
 
-      setLastCreatedTenant(createdTenantResult);
+      setLastCreatedTenant(createdTenantResult.tenant);
       setForm(initialForm);
       toast.success('Tenant berhasil dibuat');
       setPage(1);
@@ -185,47 +162,6 @@ export default function TenantsPage() {
           />
         </label>
 
-        <div className="rounded-lg border border-slate-200 p-4">
-          <p className="text-sm font-semibold text-dark">Tenant Admin Account</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Akun ini akan dibuat otomatis sebagai first admin tenant.
-          </p>
-
-          <div className="mt-3 grid gap-4 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-slate-700">Admin Email *</span>
-              <input
-                required
-                type="email"
-                value={form.adminEmail}
-                onChange={(event) => updateField('adminEmail', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-              />
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-slate-700">Admin Password *</span>
-              <div className="flex gap-2">
-                <input
-                  required
-                  minLength={8}
-                  type="text"
-                  value={form.adminPassword}
-                  onChange={(event) => updateField('adminPassword', event.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-                />
-                <button
-                  type="button"
-                  onClick={() => updateField('adminPassword', generateStrongPassword())}
-                  className="whitespace-nowrap rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Auto Generate
-                </button>
-              </div>
-            </label>
-          </div>
-        </div>
-
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
         <div>
@@ -242,26 +178,9 @@ export default function TenantsPage() {
       {lastCreatedTenant ? (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm">
           <p className="font-semibold text-dark">Tenant berhasil dibuat</p>
-          <p className="text-slate-700">ID: {lastCreatedTenant.tenant.id}</p>
-          <p className="text-slate-700">Name: {lastCreatedTenant.tenant.name}</p>
-          <p className="text-slate-700">Slug: {lastCreatedTenant.tenant.slug}</p>
-          <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-            <p className="font-semibold text-dark">First Admin Credential</p>
-            <p className="text-slate-700">Email: {lastCreatedTenant.firstAdmin.email}</p>
-            <p className="text-slate-700">Password: {lastCreatedTenant.firstAdmin.password}</p>
-            <button
-              type="button"
-              className="mt-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50"
-              onClick={async () => {
-                await navigator.clipboard.writeText(
-                  `Email: ${lastCreatedTenant.firstAdmin.email}\nPassword: ${lastCreatedTenant.firstAdmin.password}`
-                );
-                toast.success('Kredensial berhasil disalin');
-              }}
-            >
-              Copy Credential
-            </button>
-          </div>
+          <p className="text-slate-700">ID: {lastCreatedTenant.id}</p>
+          <p className="text-slate-700">Name: {lastCreatedTenant.name}</p>
+          <p className="text-slate-700">Slug: {lastCreatedTenant.slug}</p>
         </div>
       ) : null}
 

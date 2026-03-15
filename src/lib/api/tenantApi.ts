@@ -13,8 +13,6 @@ export type CreateTenantPayload = {
   email?: string;
   phone?: string;
   address?: string;
-  adminEmail: string;
-  adminPassword: string;
 };
 
 export type TenantFirstAdminCredential = {
@@ -38,11 +36,11 @@ export type Tenant = {
 
 export async function createTenant(
   payload: CreateTenantPayload
-): Promise<{ tenant: Tenant; firstAdmin: TenantFirstAdminCredential }> {
+): Promise<{ tenant: Tenant; firstAdmin: TenantFirstAdminCredential | null }> {
   const response = await httpClient.post('/tenants', payload);
   return {
     tenant: response.data.data as Tenant,
-    firstAdmin: response.data.firstAdmin as TenantFirstAdminCredential,
+    firstAdmin: (response.data.firstAdmin ?? null) as TenantFirstAdminCredential | null,
   };
 }
 

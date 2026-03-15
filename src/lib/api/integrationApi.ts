@@ -21,3 +21,9 @@ export async function provisionErp(input: {
   const response = await httpClient.post('/integrations/erp/provision', input);
   return response.data?.data;
 }
+
+export async function getErpOrganizationEnabledFeatures(organizationId: string): Promise<string[]> {
+  const response = await httpClient.get(`/integrations/erp/organizations/${encodeURIComponent(organizationId)}/features`);
+  const enabled = response.data?.data?.enabledFeatures;
+  return Array.isArray(enabled) ? (enabled as string[]).filter((x) => typeof x === 'string') : [];
+}
