@@ -52,7 +52,7 @@ const initialForm: FormState = {
   tenantId: '',
   solutionId: '',
   tier: 'Standard',
-  status: 'DEPLOYING',
+  status: 'ACTIVE',
   dbConnectionString: '',
   appUrl: '',
 };
@@ -681,7 +681,9 @@ export default function AppInstancesPage() {
                 onChange={(event) => onChangeField('status', event.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
               >
-                <option value="DEPLOYING">DEPLOYING</option>
+                {editingItem || form.status === 'DEPLOYING' ? (
+                  <option value="DEPLOYING">DEPLOYING</option>
+                ) : null}
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="SUSPENDED">SUSPENDED</option>
               </select>
