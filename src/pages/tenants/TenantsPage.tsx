@@ -98,7 +98,12 @@ export default function TenantsPage() {
       });
 
       if (form.logoFile) {
-        await uploadTenantLogo(createdTenantResult.tenant.id, form.logoFile);
+        try {
+          await uploadTenantLogo(createdTenantResult.tenant.id, form.logoFile);
+        } catch (uploadError: unknown) {
+          // Tenant already created; keep success and just surface upload failure.
+          toast.error(`Tenant dibuat, tapi upload logo gagal: ${getApiErrorMessage(uploadError)}`);
+        }
       }
 
       setLastCreatedTenant(createdTenantResult.tenant);
@@ -160,7 +165,11 @@ export default function TenantsPage() {
       });
 
       if (editForm.logoFile) {
-        await uploadTenantLogo(editingTenant.id, editForm.logoFile);
+        try {
+          await uploadTenantLogo(editingTenant.id, editForm.logoFile);
+        } catch (uploadError: unknown) {
+          toast.error(`Tenant diupdate, tapi upload logo gagal: ${getApiErrorMessage(uploadError)}`);
+        }
       }
 
       toast.success('Tenant berhasil diupdate');

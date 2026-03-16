@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,7 +19,7 @@ import {
   type ErpFeatureDefinition,
 } from '../../lib/api/integrationApi';
 import { listSolutions, type Solution } from '../../lib/api/solutionApi';
-import { listTenants, type PaginationMeta, type Tenant } from '../../lib/api/tenantApi';
+import { listTenants, type Tenant } from '../../lib/api/tenantApi';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
 import DataTable from '../../components/common/DataTable';
 import Pagination from '../../components/common/Pagination';
@@ -32,9 +32,6 @@ type FormState = {
   solutionId: string;
   tier: SubscriptionTier;
   status: AppInstanceStatus;
-  dbConnectionString: string;
-  appUrl: string;
-  logoUrl: string;
   endDate: string;
 };
 
@@ -58,10 +55,16 @@ const initialForm: FormState = {
   solutionId: '',
   tier: 'Standard',
   status: 'ACTIVE',
-  dbConnectionString: '',
-  appUrl: '',
-  logoUrl: '',
   endDate: '',
+};
+
+type TenantSubscriptionRow = {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  instances: AppInstance[];
+  primary: AppInstance;
+  aggregatedStatus: AppInstanceStatus;
 };
 
 function toDateInputValue(value: string | null | undefined): string {
@@ -105,12 +108,8 @@ export default function AppInstancesPage() {
   const [loadingTable, setLoadingTable] = useState(false);
   const [tableError, setTableError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [meta, setMeta] = useState<PaginationMeta>({
-    page: 1,
-    limit: 10,
-    total: 0,
-    totalPages: 1,
-  });
+
+  const PAGE_SIZE = 10;
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [solutions, setSolutions] = useState<Solution[]>([]);
@@ -155,9 +154,15 @@ export default function AppInstancesPage() {
     setTableError(null);
 
     try {
-      const result = await listAppInstances({ page, limit: meta.limit });
-      setItems(result.items);
-      setMeta(result.meta);
+      // Fetch all app instances so we can group by tenant without splitting tenants across pages.
+      const limit = 100;
+      const first = await listAppInstances({ page: 1, limit });
+      let all = first.items;
+      for (let nextPage = 2; nextPage <= first.meta.totalPages; nextPage += 1) {
+        const pageResult = await listAppInstances({ page: nextPage, limit });
+        all = all.concat(pageResult.items);
+      }
+      setItems(all);
     } catch (error: unknown) {
       const message = getApiErrorMessage(error);
       setTableError(message);
@@ -196,7 +201,7 @@ export default function AppInstancesPage() {
   useEffect(() => {
     void fetchAppInstances();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, []);
 
   useEffect(() => {
     void fetchTenantSubscriptions(selectedTenantId);
@@ -216,9 +221,6 @@ export default function AppInstancesPage() {
       solutionId: item.solutionId,
       tier: item.tier,
       status: item.status,
-      dbConnectionString: item.dbConnectionString ?? '',
-      appUrl: item.appUrl ?? '',
-      logoUrl: '',
       endDate: toDateInputValue(item.endDate ?? null),
     });
 
@@ -319,7 +321,6 @@ export default function AppInstancesPage() {
       organizationId,
       organizationName: tenant?.name,
       features,
-      logoUrl: form.logoUrl.trim() || undefined,
     });
   };
 
@@ -377,22 +378,6 @@ export default function AppInstancesPage() {
     window.open(urlToOpen, '_blank', 'noopener,noreferrer');
   };
 
-  const getDbNamePreview = () => {
-    if (form.dbConnectionString.trim() !== '') {
-      return null;
-    }
-
-    const selectedTenant = tenants.find((t) => t.id === form.tenantId);
-    const selectedSolution = solutions.find((s) => s.id === form.solutionId);
-
-    if (!selectedTenant || !selectedSolution) {
-      return null;
-    }
-
-    const dbName = `${selectedTenant.slug}_${selectedSolution.code}_db`;
-    return `postgresql://admin:***@host/${dbName}`;
-  };
-
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
@@ -413,8 +398,6 @@ export default function AppInstancesPage() {
         await updateAppInstance(editingItem.id, {
           tier: form.tier,
           status: form.status,
-          dbConnectionString: form.dbConnectionString || null,
-          appUrl: form.appUrl || null,
           endDate: form.endDate ? form.endDate : null,
         });
 
@@ -458,6 +441,49 @@ export default function AppInstancesPage() {
       setSubmitting(false);
     }
   };
+
+  const groupedRows = useMemo((): TenantSubscriptionRow[] => {
+    const map = new Map<string, AppInstance[]>();
+    for (const item of items) {
+      const key = item.tenantId;
+      const prev = map.get(key);
+      if (prev) prev.push(item);
+      else map.set(key, [item]);
+    }
+
+    const rows: TenantSubscriptionRow[] = [];
+    for (const [tenantId, instances] of map.entries()) {
+      const sortedInstances = [...instances].sort((a, b) =>
+        a.solution.code.localeCompare(b.solution.code)
+      );
+      const primary =
+        sortedInstances.find((i) => i.solution.code === ERP_SOLUTION_CODE) ?? sortedInstances[0];
+      const aggregatedStatus: AppInstanceStatus = sortedInstances.some((i) => i.status !== 'ACTIVE')
+        ? 'SUSPENDED'
+        : 'ACTIVE';
+
+      rows.push({
+        tenantId,
+        tenantName: primary.tenant.name,
+        tenantSlug: primary.tenant.slug,
+        instances: sortedInstances,
+        primary,
+        aggregatedStatus,
+      });
+    }
+
+    rows.sort((a, b) => a.tenantName.localeCompare(b.tenantName));
+    return rows;
+  }, [items]);
+
+  const totalPages = Math.max(1, Math.ceil(groupedRows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedRows = groupedRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safePage]);
 
   const onDelete = async () => {
     if (!deletingItem) return;
@@ -600,53 +626,70 @@ export default function AppInstancesPage() {
       ) : (
         <DataTable
           headers={['Client', 'Solution', 'Subscription', 'Status', 'Actions']}
-          hasData={items.length > 0}
+          hasData={groupedRows.length > 0}
           emptyMessage={tableError ?? 'Belum ada subscription/app instance.'}
         >
-          {items.map((item) => (
-            <tr key={item.id} className="hover:bg-slate-50/70">
-              <td className="px-4 py-3 font-medium text-dark">{item.tenant.name}</td>
+          {pagedRows.map((row) => (
+            <tr key={row.tenantId} className="hover:bg-slate-50/70">
+              <td className="px-4 py-3 font-medium text-dark">{row.tenantName}</td>
               <td className="px-4 py-3">
-                {item.solution.name}
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                  {item.solution.code}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {row.instances.map((instance) => (
+                    <span
+                      key={instance.id}
+                      className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+                      title={instance.solution.name}
+                    >
+                      {instance.solution.code}
+                    </span>
+                  ))}
+                </div>
               </td>
               <td className="px-4 py-3">
-                <div className="space-y-1">
-                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                    {item.tier}
-                  </span>
-                  <div className="text-xs text-slate-500">
-                    Sisa: {formatRemaining(item.endDate ?? null)} • End: {formatEndDate(item.endDate ?? null)}
-                  </div>
+                <div className="space-y-2">
+                  {row.instances.map((instance) => (
+                    <div key={instance.id} className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                          {instance.solution.code}: {instance.tier}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Sisa: {formatRemaining(instance.endDate ?? null)} • End:{' '}
+                        {formatEndDate(instance.endDate ?? null)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </td>
               <td className="px-4 py-3">
                 <span
                   className={[
                     'rounded-full px-2 py-1 text-xs font-semibold',
-                    item.status === 'ACTIVE'
+                    row.aggregatedStatus === 'ACTIVE'
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-red-100 text-red-700',
                   ].join(' ')}
                 >
-                  {item.status}
+                  {row.aggregatedStatus}
                 </span>
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
+                  {row.instances.map((instance) => (
+                    <button
+                      key={instance.id}
+                      type="button"
+                      onClick={() => openSolutionApp(instance)}
+                      className={getSolutionButtonClasses(instance.solution.code)}
+                      title={`Buka ${instance.solution.code}`}
+                    >
+                      {instance.solution.code}
+                    </button>
+                  ))}
                   <button
                     type="button"
-                    onClick={() => openSolutionApp(item)}
-                    className={getSolutionButtonClasses(item.solution.code)}
-                    title={`Buka ${item.solution.code}`}
-                  >
-                    {item.solution.code}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(item)}
+                    onClick={() => openEditModal(row.primary)}
                     className="rounded-md p-1.5 text-yellow-600 hover:bg-yellow-50"
                     title="Edit"
                   >
@@ -655,7 +698,7 @@ export default function AppInstancesPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setDeletingItem(item);
+                      setDeletingItem(row.primary);
                       setIsDeleteOpen(true);
                     }}
                     className="rounded-md p-1.5 text-red-600 hover:bg-red-50"
@@ -670,7 +713,7 @@ export default function AppInstancesPage() {
         </DataTable>
       )}
 
-      <Pagination page={meta.page} totalPages={meta.totalPages} onPageChange={setPage} />
+      <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
       <Modal
         isOpen={isModalOpen}
@@ -760,19 +803,6 @@ export default function AppInstancesPage() {
             </label>
           </div>
 
-          {isErpSolution ? (
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-slate-700">Company Logo URL (ERP)</span>
-              <input
-                value={form.logoUrl}
-                onChange={(event) => onChangeField('logoUrl', event.target.value)}
-                placeholder="https://.../logo.png"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-              />
-              <p className="text-xs text-slate-500">URL gambar logo yang akan di-sync ke ERP Company Info.</p>
-            </label>
-          ) : null}
-
           {needsErpFeaturePicker ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-semibold text-dark">ERP Features (Custom)</p>
@@ -809,34 +839,6 @@ export default function AppInstancesPage() {
             </div>
           ) : null}
 
-          {editingItem ? (
-            <>
-              <label className="space-y-1">
-                <span className="text-sm font-medium text-slate-700">DB Connection String</span>
-                <input
-                  value={form.dbConnectionString}
-                  onChange={(event) => onChangeField('dbConnectionString', event.target.value)}
-                  placeholder="postgresql://user:pass@host:port/db"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-                />
-                {getDbNamePreview() ? (
-                  <p className="text-xs text-slate-500">{`Preview: ${getDbNamePreview()}`}</p>
-                ) : (
-                  <p className="text-xs text-slate-500">Kosongkan untuk auto-generate kredensial database.</p>
-                )}
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-sm font-medium text-slate-700">App URL</span>
-                <input
-                  value={form.appUrl}
-                  onChange={(event) => onChangeField('appUrl', event.target.value)}
-                  placeholder="https://client-app.yourdomain.com"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-                />
-              </label>
-            </>
-          ) : null}
 
           <div className="flex justify-end gap-2">
             <button
