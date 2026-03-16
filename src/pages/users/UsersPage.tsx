@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { toast } from 'sonner';
 import {
@@ -55,6 +55,7 @@ export default function UsersPage() {
   const [loadingTable, setLoadingTable] = useState(false);
   const [tableError, setTableError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [tenantFilter, setTenantFilter] = useState('');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState<PaginationMeta>({
@@ -82,7 +83,7 @@ export default function UsersPage() {
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoadingTable(true);
     setTableError(null);
 
@@ -107,7 +108,7 @@ export default function UsersPage() {
     } finally {
       setLoadingTable(false);
     }
-  };
+  }, [meta.limit, page, search, tenantFilter]);
 
   useEffect(() => {
     void fetchTenants();
@@ -115,7 +116,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     void fetchUsers();
-  }, [page, tenantFilter]);
+  }, [fetchUsers]);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -367,16 +368,21 @@ export default function UsersPage() {
               ))}
             </select>
             <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Cari nama/username/email/tenant"
               className="w-64 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/30 focus:ring"
             />
             <button
               type="button"
               onClick={() => {
+                if (page === 1 && search === searchInput) {
+                  void fetchUsers();
+                  return;
+                }
+
                 setPage(1);
-                void fetchUsers();
+                setSearch(searchInput);
               }}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
             >

@@ -4,43 +4,25 @@ import {
   signOut,
 } from 'firebase/auth';
 import type { IdTokenResult, User } from 'firebase/auth';
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { AuthContext, type AuthContextValue } from './auth-context';
 import { auth } from '../lib/firebase/firebaseClient';
 
-type AuthContextValue = {
-  user: User | null;
-  loading: boolean;
-  claims: Record<string, unknown> | null;
-  isSuperAdmin: boolean;
-  loginWithEmail: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  getIdToken: () => Promise<string | null>;
-  refreshClaims: () => Promise<void>;
-};
+function extractClaims(tokenResult: IdTokenResult | null) {
+  if (!tokenResult) {
+    return null;
+  }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+  return tokenResult.claims as Record<string, unknown>;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [claims, setClaims] = useState<Record<string, unknown> | null>(null);
 
-  const extractClaims = (tokenResult: IdTokenResult | null) => {
-    if (!tokenResult) {
-      return null;
-    }
-
-    return tokenResult.claims as Record<string, unknown>;
-  };
-
-  const refreshClaims = async () => {
+  const refreshClaims = useCallback(async () => {
     if (!auth.currentUser) {
       setClaims(null);
       return;
@@ -48,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const tokenResult = await auth.currentUser.getIdTokenResult(true);
     setClaims(extractClaims(tokenResult));
-  };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -91,18 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       refreshClaims,
     }),
-    [user, loading, claims]
+    [user, loading, claims, refreshClaims]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-
-  return context;
 }

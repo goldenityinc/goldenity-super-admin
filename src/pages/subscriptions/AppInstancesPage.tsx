@@ -200,7 +200,6 @@ export default function AppInstancesPage() {
 
   useEffect(() => {
     void fetchAppInstances();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

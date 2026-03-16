@@ -2,7 +2,7 @@ import { Home, Building2, Users, Layers3, Link2, Settings, Menu, X, LogOut, Down
 import { useState } from 'react';
 import type { ComponentType } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 type SidebarItem = {
   to: string;
