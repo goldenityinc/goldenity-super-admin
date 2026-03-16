@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   createTenant,
   listTenants,
+  updateTenant,
   uploadTenantLogo,
   type PaginationMeta,
   type Tenant,
@@ -12,6 +14,7 @@ import { getApiErrorMessage } from '../../lib/utils/apiError';
 import DataTable from '../../components/common/DataTable';
 import Pagination from '../../components/common/Pagination';
 import TableSkeleton from '../../components/common/TableSkeleton';
+import Modal from '../../components/common/Modal';
 
 type TenantFormState = {
   name: string;
@@ -36,6 +39,12 @@ export default function TenantsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastCreatedTenant, setLastCreatedTenant] = useState<Tenant | null>(null);
+
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [editForm, setEditForm] = useState<TenantFormState>(initialForm);
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   const [items, setItems] = useState<Tenant[]>([]);
   const [loadingTable, setLoadingTable] = useState(false);
@@ -112,6 +121,58 @@ export default function TenantsPage() {
 
   const updateLogoFile = (file: File | null) => {
     setForm((prev) => ({ ...prev, logoFile: file }));
+  };
+
+  const openEdit = (tenant: Tenant) => {
+    setEditingTenant(tenant);
+    setEditIsActive(Boolean(tenant.isActive));
+    setEditForm({
+      name: tenant.name,
+      slug: tenant.slug,
+      email: tenant.email ?? '',
+      phone: tenant.phone ?? '',
+      address: tenant.address ?? '',
+      logoFile: null,
+    });
+    setIsEditOpen(true);
+  };
+
+  const updateEditField = (field: keyof TenantFormState, value: string) => {
+    setEditForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateEditLogoFile = (file: File | null) => {
+    setEditForm((prev) => ({ ...prev, logoFile: file }));
+  };
+
+  const onSubmitEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingTenant) return;
+
+    setEditSubmitting(true);
+    try {
+      await updateTenant(editingTenant.id, {
+        name: editForm.name,
+        email: editForm.email || null,
+        phone: editForm.phone || null,
+        address: editForm.address || null,
+        isActive: editIsActive,
+      });
+
+      if (editForm.logoFile) {
+        await uploadTenantLogo(editingTenant.id, editForm.logoFile);
+      }
+
+      toast.success('Tenant berhasil diupdate');
+      setIsEditOpen(false);
+      setEditingTenant(null);
+      setEditForm(initialForm);
+      await fetchTenants();
+    } catch (submitError: unknown) {
+      toast.error(getApiErrorMessage(submitError));
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   return (
@@ -233,10 +294,10 @@ export default function TenantsPage() {
         </div>
 
         {loadingTable ? (
-          <TableSkeleton rows={5} columns={5} />
+          <TableSkeleton rows={5} columns={6} />
         ) : (
           <DataTable
-            headers={['Name', 'Slug', 'Email', 'Status', 'Created At']}
+            headers={['Name', 'Slug', 'Email', 'Status', 'Created At', 'Actions']}
             hasData={items.length > 0}
             emptyMessage={tableError ?? 'Belum ada tenant.'}
           >
@@ -258,6 +319,16 @@ export default function TenantsPage() {
                 <td className="px-4 py-3 text-slate-500">
                   {new Date(tenant.createdAt).toLocaleDateString()}
                 </td>
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(tenant)}
+                    className="rounded-md p-1.5 text-yellow-600 hover:bg-yellow-50"
+                    title="Edit"
+                  >
+                    <Pencil size={16} />
+                  </button>
+                </td>
               </tr>
             ))}
           </DataTable>
@@ -265,6 +336,114 @@ export default function TenantsPage() {
 
         <Pagination page={meta.page} totalPages={meta.totalPages} onPageChange={setPage} />
       </div>
+
+      <Modal
+        isOpen={isEditOpen}
+        title={editingTenant ? `Edit Tenant: ${editingTenant.name}` : 'Edit Tenant'}
+        onClose={() => {
+          setIsEditOpen(false);
+          setEditingTenant(null);
+        }}
+      >
+        <form onSubmit={onSubmitEdit} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Company Name *</span>
+              <input
+                required
+                value={editForm.name}
+                onChange={(event) => updateEditField('name', event.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Slug</span>
+              <input
+                value={editForm.slug}
+                disabled
+                className="w-full cursor-not-allowed rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500"
+              />
+              <p className="text-xs text-slate-500">Slug tidak bisa diubah untuk menjaga konsistensi routing & integrasi ERP.</p>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Email</span>
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={(event) => updateEditField('email', event.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Phone</span>
+              <input
+                value={editForm.phone}
+                onChange={(event) => updateEditField('phone', event.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Status</span>
+              <select
+                value={editIsActive ? 'ACTIVE' : 'INACTIVE'}
+                onChange={(event) => setEditIsActive(event.target.value === 'ACTIVE')}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              >
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">Company Logo</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  updateEditLogoFile(file);
+                }}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              />
+              <p className="text-xs text-slate-500">Upload logo baru jika ingin mengganti (maks 2MB).</p>
+            </label>
+          </div>
+
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Address</span>
+            <textarea
+              value={editForm.address}
+              onChange={(event) => updateEditField('address', event.target.value)}
+              rows={3}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            />
+          </label>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditOpen(false);
+                setEditingTenant(null);
+              }}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={editSubmitting}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {editSubmitting ? 'Menyimpan...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </section>
   );
 }

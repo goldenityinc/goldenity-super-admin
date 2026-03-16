@@ -15,6 +15,14 @@ export type CreateTenantPayload = {
   address?: string;
 };
 
+export type UpdateTenantPayload = {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  isActive?: boolean;
+};
+
 export type TenantFirstAdminCredential = {
   id: string;
   email: string;
@@ -66,4 +74,9 @@ export async function uploadTenantLogo(tenantId: string, file: File): Promise<{ 
   });
 
   return response.data?.data as { tenantId: string; logoUrl: string };
+}
+
+export async function updateTenant(tenantId: string, payload: UpdateTenantPayload): Promise<Tenant> {
+  const response = await httpClient.put(`/tenants/${encodeURIComponent(tenantId)}`, payload);
+  return response.data?.data as Tenant;
 }
