@@ -35,6 +35,7 @@ type FormState = {
   dbConnectionString: string;
   appUrl: string;
   logoUrl: string;
+  endDate: string;
 };
 
 const ERP_SOLUTION_CODE = 'ERP' as const;
@@ -60,7 +61,44 @@ const initialForm: FormState = {
   dbConnectionString: '',
   appUrl: '',
   logoUrl: '',
+  endDate: '',
 };
+
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  // Use UTC date portion for stability.
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatEndDate(value: string | null | undefined): string {
+  const raw = typeof value === 'string' ? value : '';
+  if (!raw) return '—';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString();
+}
+
+function formatRemaining(value: string | null | undefined): string {
+  if (!value) return '—';
+  const end = new Date(value);
+  if (Number.isNaN(end.getTime())) return '—';
+  const ms = end.getTime() - Date.now();
+  const days = Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+  if (days >= 365) {
+    const years = Math.floor(days / 365);
+    return `${years} tahun`;
+  }
+  if (days >= 60) {
+    const months = Math.floor(days / 30);
+    return `${months} bulan`;
+  }
+  return `${days} hari`;
+}
 
 export default function AppInstancesPage() {
   const [items, setItems] = useState<AppInstance[]>([]);
@@ -181,6 +219,7 @@ export default function AppInstancesPage() {
       dbConnectionString: item.dbConnectionString ?? '',
       appUrl: item.appUrl ?? '',
       logoUrl: '',
+      endDate: toDateInputValue(item.endDate ?? null),
     });
 
     // Preload happens via effect when ERP + Custom.
@@ -376,6 +415,7 @@ export default function AppInstancesPage() {
           status: form.status,
           dbConnectionString: form.dbConnectionString || null,
           appUrl: form.appUrl || null,
+          endDate: form.endDate ? form.endDate : null,
         });
 
         if (isErpSolution) {
@@ -388,6 +428,7 @@ export default function AppInstancesPage() {
           solutionId: form.solutionId,
           tier: form.tier,
           status: form.status,
+          endDate: form.endDate ? form.endDate : null,
         });
 
         try {
@@ -558,7 +599,7 @@ export default function AppInstancesPage() {
         <TableSkeleton rows={6} columns={5} />
       ) : (
         <DataTable
-          headers={['Client', 'Solution', 'Tier', 'Status', 'Actions']}
+          headers={['Client', 'Solution', 'Subscription', 'Status', 'Actions']}
           hasData={items.length > 0}
           emptyMessage={tableError ?? 'Belum ada subscription/app instance.'}
         >
@@ -572,9 +613,14 @@ export default function AppInstancesPage() {
                 </span>
               </td>
               <td className="px-4 py-3">
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                  {item.tier}
-                </span>
+                <div className="space-y-1">
+                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                    {item.tier}
+                  </span>
+                  <div className="text-xs text-slate-500">
+                    Sisa: {formatRemaining(item.endDate ?? null)} • End: {formatEndDate(item.endDate ?? null)}
+                  </div>
+                </div>
               </td>
               <td className="px-4 py-3">
                 <span
@@ -700,6 +746,17 @@ export default function AppInstancesPage() {
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="SUSPENDED">SUSPENDED</option>
               </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">End Date</span>
+              <input
+                type="date"
+                value={form.endDate}
+                onChange={(event) => onChangeField('endDate', event.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              />
+              <p className="text-xs text-slate-500">Kosongkan jika subscription tidak memiliki batas akhir.</p>
             </label>
           </div>
 
