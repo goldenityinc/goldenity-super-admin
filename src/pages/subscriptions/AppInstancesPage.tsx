@@ -367,13 +367,18 @@ export default function AppInstancesPage() {
       toast.error(
         code === 'ERP'
           ? 'ERP Web Origin belum dikonfigurasi. Set VITE_ERP_WEB_ORIGIN di Vercel.'
-          : 'Web Origin belum dikonfigurasi untuk subscription ini.',
+          : code === 'POS'
+            ? 'POS Web Origin belum dikonfigurasi. Set VITE_POS_WEB_ORIGIN di Vercel.'
+            : code === 'CLINIC'
+              ? 'CLINIC Web Origin belum dikonfigurasi. Set VITE_CLINIC_WEB_ORIGIN di Vercel.'
+              : 'Web Origin belum dikonfigurasi untuk subscription ini.',
       );
       return;
     }
 
+    const tenantLoginUrl = `${origin}/t/${item.tenant.slug}/login`;
     const urlToOpen =
-      code === 'ERP' ? `${origin}/t/${item.tenant.slug}/login` : item.appUrl ?? origin;
+      code === 'ERP' || code === 'POS' || code === 'CLINIC' ? tenantLoginUrl : item.appUrl ?? origin;
 
     window.open(urlToOpen, '_blank', 'noopener,noreferrer');
   };
