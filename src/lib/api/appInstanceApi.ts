@@ -3,12 +3,14 @@ import type { PaginationMeta } from './tenantApi';
 
 export type SubscriptionTier = 'Standard' | 'Professional' | 'Enterprise' | 'Custom';
 export type AppInstanceStatus = 'ACTIVE' | 'SUSPENDED';
+export type SyncMode = 'CLOUD_FIRST' | 'LOCAL_FIRST' | 'LOCAL_SERVER';
 
 export type AppInstance = {
   id: string;
   tenantId: string;
   solutionId: string;
   tier: SubscriptionTier;
+  syncMode: SyncMode;
   status: AppInstanceStatus;
   dbConnectionString?: string | null;
   appUrl?: string | null;
@@ -31,6 +33,7 @@ export type CreateAppInstancePayload = {
   tenantId: string;
   solutionId: string;
   tier: SubscriptionTier;
+  syncMode?: SyncMode;
   status?: AppInstanceStatus;
   dbConnectionString?: string | null;
   appUrl?: string | null;
@@ -39,6 +42,7 @@ export type CreateAppInstancePayload = {
 
 export type UpdateAppInstancePayload = {
   tier?: SubscriptionTier;
+  syncMode?: SyncMode;
   status?: AppInstanceStatus;
   dbConnectionString?: string | null;
   appUrl?: string | null;

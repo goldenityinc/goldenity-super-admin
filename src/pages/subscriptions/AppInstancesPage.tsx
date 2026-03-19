@@ -6,6 +6,7 @@ import {
   createAppInstance,
   deleteAppInstance,
   listAppInstances,
+  type SyncMode,
   updateAppInstance,
   updateSubscriptionTier,
   type AppInstance,
@@ -31,6 +32,7 @@ type FormState = {
   tenantId: string;
   solutionId: string;
   tier: SubscriptionTier;
+  syncMode: SyncMode;
   status: AppInstanceStatus;
   endDate: string;
 };
@@ -46,6 +48,12 @@ const ERP_TIER_FEATURES: Record<'Standard' | 'Professional' | 'Enterprise', stri
   Enterprise: ['crm', 'sales', 'inventory', 'purchasing', 'accounting', 'hr'],
 };
 
+const SYNC_MODE_LABELS: Record<SyncMode, string> = {
+  CLOUD_FIRST: 'Cloud First',
+  LOCAL_FIRST: 'Local First',
+  LOCAL_SERVER: 'Local Server',
+};
+
 function isValidErpOrgIdCandidate(value: string): boolean {
   return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(value) && value.length >= 2 && value.length <= 50;
 }
@@ -54,6 +62,7 @@ const initialForm: FormState = {
   tenantId: '',
   solutionId: '',
   tier: 'Standard',
+  syncMode: 'CLOUD_FIRST',
   status: 'ACTIVE',
   endDate: '',
 };
@@ -101,6 +110,18 @@ function formatRemaining(value: string | null | undefined): string {
     return `${months} bulan`;
   }
   return `${days} hari`;
+}
+
+function getSyncModeBadgeClass(mode: SyncMode): string {
+  if (mode === 'CLOUD_FIRST') {
+    return 'bg-sky-100 text-sky-700';
+  }
+
+  if (mode === 'LOCAL_FIRST') {
+    return 'bg-amber-100 text-amber-700';
+  }
+
+  return 'bg-emerald-100 text-emerald-700';
 }
 
 export default function AppInstancesPage() {
@@ -219,6 +240,7 @@ export default function AppInstancesPage() {
       tenantId: item.tenantId,
       solutionId: item.solutionId,
       tier: item.tier,
+      syncMode: item.syncMode ?? 'CLOUD_FIRST',
       status: item.status,
       endDate: toDateInputValue(item.endDate ?? null),
     });
@@ -401,6 +423,7 @@ export default function AppInstancesPage() {
       if (editingItem) {
         await updateAppInstance(editingItem.id, {
           tier: form.tier,
+          syncMode: form.syncMode,
           status: form.status,
           endDate: form.endDate ? form.endDate : null,
         });
@@ -414,6 +437,7 @@ export default function AppInstancesPage() {
           tenantId: form.tenantId,
           solutionId: form.solutionId,
           tier: form.tier,
+          syncMode: form.syncMode,
           status: form.status,
           endDate: form.endDate ? form.endDate : null,
         });
@@ -657,6 +681,14 @@ export default function AppInstancesPage() {
                         <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                           {instance.solution.code}: {instance.tier}
                         </span>
+                        <span
+                          className={[
+                            'inline-flex rounded-full px-2 py-1 text-xs font-semibold',
+                            getSyncModeBadgeClass(instance.syncMode ?? 'CLOUD_FIRST'),
+                          ].join(' ')}
+                        >
+                          Sync: {SYNC_MODE_LABELS[instance.syncMode ?? 'CLOUD_FIRST']}
+                        </span>
                       </div>
                       <div className="text-xs text-slate-500">
                         Sisa: {formatRemaining(instance.endDate ?? null)} • End:{' '}
@@ -792,6 +824,19 @@ export default function AppInstancesPage() {
               >
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="SUSPENDED">SUSPENDED</option>
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Mode Sinkronisasi (POS)</span>
+              <select
+                value={form.syncMode}
+                onChange={(event) => onChangeField('syncMode', event.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              >
+                <option value="CLOUD_FIRST">Cloud First (Full Online)</option>
+                <option value="LOCAL_FIRST">Local First (Offline Mandiri)</option>
+                <option value="LOCAL_SERVER">Local Server (Multi-Device Offline)</option>
               </select>
             </label>
 
