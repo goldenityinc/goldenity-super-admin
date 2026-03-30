@@ -13,6 +13,7 @@ import {
   type AppInstanceStatus,
   type SubscriptionTier,
 } from '../../lib/api/appInstanceApi';
+import { SUBSCRIPTION_ADDONS, type SubscriptionAddonKey } from '../../lib/constants/subscriptionAddons';
 import {
   getErpFeatureCatalog,
   getErpOrganizationEnabledFeatures,
@@ -32,6 +33,7 @@ type FormState = {
   tenantId: string;
   solutionId: string;
   tier: SubscriptionTier;
+  addons: SubscriptionAddonKey[];
   syncMode: SyncMode;
   status: AppInstanceStatus;
   endDate: string;
@@ -62,6 +64,7 @@ const initialForm: FormState = {
   tenantId: '',
   solutionId: '',
   tier: 'Standard',
+  addons: [],
   syncMode: 'CLOUD_FIRST',
   status: 'ACTIVE',
   endDate: '',
@@ -240,6 +243,11 @@ export default function AppInstancesPage() {
       tenantId: item.tenantId,
       solutionId: item.solutionId,
       tier: item.tier,
+      addons: Array.isArray(item.addons)
+        ? item.addons.filter((addon): addon is SubscriptionAddonKey =>
+            SUBSCRIPTION_ADDONS.some((def) => def.key === addon),
+          )
+        : [],
       syncMode: item.syncMode ?? 'CLOUD_FIRST',
       status: item.status,
       endDate: toDateInputValue(item.endDate ?? null),
@@ -260,6 +268,16 @@ export default function AppInstancesPage() {
         setErpSelectedFeatures([]);
       }
       return next;
+    });
+  };
+
+  const toggleAddon = (addon: SubscriptionAddonKey) => {
+    setForm((prev) => {
+      const hasAddon = prev.addons.includes(addon);
+      return {
+        ...prev,
+        addons: hasAddon ? prev.addons.filter((item) => item !== addon) : [...prev.addons, addon],
+      };
     });
   };
 
@@ -423,6 +441,7 @@ export default function AppInstancesPage() {
       if (editingItem) {
         await updateAppInstance(editingItem.id, {
           tier: form.tier,
+          addons: form.addons,
           syncMode: form.syncMode,
           status: form.status,
           endDate: form.endDate ? form.endDate : null,
@@ -437,6 +456,7 @@ export default function AppInstancesPage() {
           tenantId: form.tenantId,
           solutionId: form.solutionId,
           tier: form.tier,
+          addons: form.addons,
           syncMode: form.syncMode,
           status: form.status,
           endDate: form.endDate ? form.endDate : null,
@@ -850,6 +870,32 @@ export default function AppInstancesPage() {
               />
               <p className="text-xs text-slate-500">Kosongkan jika subscription tidak memiliki batas akhir.</p>
             </label>
+          </div>
+
+          <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-sm font-semibold text-dark">Add-ons (Ekstra Modul)</p>
+            <p className="text-xs text-slate-600">
+              Modul tambahan di luar tier utama. Centang untuk mengaktifkan add-on pada subscription ini.
+            </p>
+            <div className="grid gap-2 md:grid-cols-2">
+              {SUBSCRIPTION_ADDONS.map((addon) => (
+                <label
+                  key={addon.key}
+                  className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.addons.includes(addon.key)}
+                    onChange={() => toggleAddon(addon.key)}
+                    className="mt-1"
+                  />
+                  <span className="block">
+                    <span className="block text-sm font-medium text-dark">{addon.label}</span>
+                    <span className="block text-xs text-slate-500">{addon.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
 
           {needsErpFeaturePicker ? (

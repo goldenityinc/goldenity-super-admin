@@ -10,6 +10,7 @@ export type AppInstance = {
   tenantId: string;
   solutionId: string;
   tier: SubscriptionTier;
+  addons: string[];
   syncMode: SyncMode;
   status: AppInstanceStatus;
   dbConnectionString?: string | null;
@@ -33,6 +34,7 @@ export type CreateAppInstancePayload = {
   tenantId: string;
   solutionId: string;
   tier: SubscriptionTier;
+  addons?: string[];
   syncMode?: SyncMode;
   status?: AppInstanceStatus;
   dbConnectionString?: string | null;
@@ -42,6 +44,7 @@ export type CreateAppInstancePayload = {
 
 export type UpdateAppInstancePayload = {
   tier?: SubscriptionTier;
+  addons?: string[];
   syncMode?: SyncMode;
   status?: AppInstanceStatus;
   dbConnectionString?: string | null;
