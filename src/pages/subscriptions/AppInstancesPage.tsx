@@ -47,8 +47,30 @@ const CLINIC_WEB_ORIGIN = (import.meta.env.VITE_CLINIC_WEB_ORIGIN as string | un
 const ERP_TIER_FEATURES: Record<'Standard' | 'Professional' | 'Enterprise', string[]> = {
   Standard: ['crm', 'sales'],
   Professional: ['crm', 'sales', 'inventory', 'purchasing'],
-  Enterprise: ['crm', 'sales', 'inventory', 'purchasing', 'accounting', 'hr'],
+  Enterprise: [
+    'crm',
+    'sales',
+    'inventory',
+    'purchasing',
+    'accounting',
+    'hr_core',
+    'hr_recruitment',
+    'hr_leave',
+    'hr_payroll',
+  ],
 };
+
+const ERP_FEATURE_CATALOG_FALLBACK: ErpFeatureDefinition[] = [
+  { key: 'crm', label: 'CRM' },
+  { key: 'sales', label: 'Sales' },
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'purchasing', label: 'Purchasing' },
+  { key: 'accounting', label: 'Accounting' },
+  { key: 'hr_core', label: 'HR Core', description: 'Employee master, departments, positions, and org structure.' },
+  { key: 'hr_recruitment', label: 'HR Recruitment', description: 'Job vacancies, candidates, and interview workflow.' },
+  { key: 'hr_leave', label: 'HR Leave', description: 'Leave types, balances, requests, and approvals.' },
+  { key: 'hr_payroll', label: 'HR Payroll', description: 'Salary structures, overtime, and payroll runs.' },
+];
 
 const SYNC_MODE_LABELS: Record<SyncMode, string> = {
   CLOUD_FIRST: 'Cloud First',
@@ -301,8 +323,26 @@ export default function AppInstancesPage() {
       setErpFeatureLoading(true);
       try {
         const features = await getErpFeatureCatalog();
-        setErpFeatureCatalog(features);
+        const byKey = new Map<string, ErpFeatureDefinition>();
+
+        for (const f of ERP_FEATURE_CATALOG_FALLBACK) {
+          byKey.set(f.key, f);
+        }
+
+        for (const f of features) {
+          if (!f?.key) continue;
+          const existing = byKey.get(f.key);
+          byKey.set(f.key, {
+            key: f.key,
+            label: f.label || existing?.label || f.key,
+            description: f.description ?? existing?.description,
+          });
+        }
+
+        const merged = Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label));
+        setErpFeatureCatalog(merged);
       } catch (error: unknown) {
+        setErpFeatureCatalog(ERP_FEATURE_CATALOG_FALLBACK);
         toast.error(`Gagal memuat daftar fitur ERP: ${getApiErrorMessage(error)}`);
       } finally {
         setErpFeatureLoading(false);
