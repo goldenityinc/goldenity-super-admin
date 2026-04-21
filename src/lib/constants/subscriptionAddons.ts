@@ -1,5 +1,46 @@
 export type SubscriptionModuleKey = string;
 
+export const TIER_DEFAULT_MODULES: Record<
+  'Standard' | 'Professional' | 'Enterprise',
+  SubscriptionModuleKey[]
+> = {
+  Standard: [
+    'module_sales',
+    'module_inventory',
+    'module_customer_management',
+  ],
+  Professional: [
+    'module_sales',
+    'module_inventory',
+    'module_customer_management',
+    'module_finance_reports',
+    'module_user_management',
+    'module_debt_management',
+    'module_role_management',
+  ],
+  Enterprise: [
+    'module_sales',
+    'module_inventory',
+    'module_customer_management',
+    'module_finance_reports',
+    'module_user_management',
+    'module_debt_management',
+    'module_role_management',
+    'module_service_orders',
+    'module_custom_rbac',
+    'module_sales_history',
+    'module_procurement',
+    'module_supplier_management',
+    'module_expense_management',
+    'module_tax_reports',
+    'module_hardware_devices',
+    'module_realtime_sync',
+    'module_category_management',
+    'module_receipt_printing',
+    'module_service_receipt_printing',
+  ],
+};
+
 const LEGACY_ADDON_TO_MODULE_MAP = {
   service_note: 'module_service_orders',
 } as const;

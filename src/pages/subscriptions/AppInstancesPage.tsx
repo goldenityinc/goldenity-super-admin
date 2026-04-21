@@ -18,6 +18,7 @@ import {
 import {
   mapLegacyAddonsToModules,
   mapModulesToLegacyAddons,
+  TIER_DEFAULT_MODULES,
   type SubscriptionModuleKey,
 } from '../../lib/constants/subscriptionAddons';
 import {
@@ -155,6 +156,14 @@ function getSyncModeBadgeClass(mode: SyncMode): string {
   return 'bg-emerald-100 text-emerald-700';
 }
 
+function getTierTemplateModules(tier: SubscriptionTier): SubscriptionModuleKey[] {
+  if (tier === 'Custom') {
+    return [];
+  }
+
+  return [...new Set(TIER_DEFAULT_MODULES[tier])];
+}
+
 export default function AppInstancesPage() {
   const [items, setItems] = useState<AppInstance[]>([]);
   const [loadingTable, setLoadingTable] = useState(false);
@@ -288,6 +297,7 @@ export default function AppInstancesPage() {
     setForm((prev) => {
       const next = { ...prev, [field]: value as FormState[typeof field] };
       if (field === 'tier' && value !== 'Custom') {
+        next.modules = getTierTemplateModules(value as SubscriptionTier);
         setErpSelectedFeatures([]);
       }
       if (field === 'solutionId' && value !== prev.solutionId) {
