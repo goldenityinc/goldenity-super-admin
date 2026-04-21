@@ -13,7 +13,12 @@ import {
   type AppInstanceStatus,
   type SubscriptionTier,
 } from '../../lib/api/appInstanceApi';
-import { SUBSCRIPTION_ADDONS, type SubscriptionAddonKey } from '../../lib/constants/subscriptionAddons';
+import {
+  SUBSCRIPTION_MODULE_OPTIONS,
+  mapLegacyAddonsToModules,
+  mapModulesToLegacyAddons,
+  type SubscriptionModuleKey,
+} from '../../lib/constants/subscriptionAddons';
 import {
   getErpFeatureCatalog,
   getErpOrganizationEnabledFeatures,
@@ -33,7 +38,7 @@ type FormState = {
   tenantId: string;
   solutionId: string;
   tier: SubscriptionTier;
-  addons: SubscriptionAddonKey[];
+  modules: SubscriptionModuleKey[];
   syncMode: SyncMode;
   status: AppInstanceStatus;
   endDate: string;
@@ -86,7 +91,7 @@ const initialForm: FormState = {
   tenantId: '',
   solutionId: '',
   tier: 'Standard',
-  addons: [],
+  modules: [],
   syncMode: 'CLOUD_FIRST',
   status: 'ACTIVE',
   endDate: '',
@@ -265,11 +270,11 @@ export default function AppInstancesPage() {
       tenantId: item.tenantId,
       solutionId: item.solutionId,
       tier: item.tier,
-      addons: Array.isArray(item.addons)
-        ? item.addons.filter((addon): addon is SubscriptionAddonKey =>
-            SUBSCRIPTION_ADDONS.some((def) => def.key === addon),
+      modules: Array.isArray(item.moduleKeys)
+        ? item.moduleKeys.filter((moduleKey): moduleKey is SubscriptionModuleKey =>
+            SUBSCRIPTION_MODULE_OPTIONS.some((def) => def.key === moduleKey),
           )
-        : [],
+        : mapLegacyAddonsToModules(item.addons),
       syncMode: item.syncMode ?? 'CLOUD_FIRST',
       status: item.status,
       endDate: toDateInputValue(item.endDate ?? null),
@@ -293,12 +298,14 @@ export default function AppInstancesPage() {
     });
   };
 
-  const toggleAddon = (addon: SubscriptionAddonKey) => {
+  const toggleModule = (moduleKey: SubscriptionModuleKey) => {
     setForm((prev) => {
-      const hasAddon = prev.addons.includes(addon);
+      const hasModule = prev.modules.includes(moduleKey);
       return {
         ...prev,
-        addons: hasAddon ? prev.addons.filter((item) => item !== addon) : [...prev.addons, addon],
+        modules: hasModule
+          ? prev.modules.filter((item) => item !== moduleKey)
+          : [...prev.modules, moduleKey],
       };
     });
   };
@@ -481,7 +488,8 @@ export default function AppInstancesPage() {
       if (editingItem) {
         await updateAppInstance(editingItem.id, {
           tier: form.tier,
-          addons: form.addons,
+          moduleKeys: form.modules,
+          addons: mapModulesToLegacyAddons(form.modules),
           syncMode: form.syncMode,
           status: form.status,
           endDate: form.endDate ? form.endDate : null,
@@ -496,7 +504,8 @@ export default function AppInstancesPage() {
           tenantId: form.tenantId,
           solutionId: form.solutionId,
           tier: form.tier,
-          addons: form.addons,
+          moduleKeys: form.modules,
+          addons: mapModulesToLegacyAddons(form.modules),
           syncMode: form.syncMode,
           status: form.status,
           endDate: form.endDate ? form.endDate : null,
@@ -913,25 +922,25 @@ export default function AppInstancesPage() {
           </div>
 
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-sm font-semibold text-dark">Add-ons (Ekstra Modul)</p>
+            <p className="text-sm font-semibold text-dark">Modules (Feature Flags)</p>
             <p className="text-xs text-slate-600">
-              Modul tambahan di luar tier utama. Centang untuk mengaktifkan add-on pada subscription ini.
+              Daftar modul POS yang dikirim sebagai module keys. List ini masih statis sementara sampai endpoint katalog modul tersedia.
             </p>
             <div className="grid gap-2 md:grid-cols-2">
-              {SUBSCRIPTION_ADDONS.map((addon) => (
+              {SUBSCRIPTION_MODULE_OPTIONS.map((moduleOption) => (
                 <label
-                  key={addon.key}
+                  key={moduleOption.key}
                   className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
                 >
                   <input
                     type="checkbox"
-                    checked={form.addons.includes(addon.key)}
-                    onChange={() => toggleAddon(addon.key)}
+                    checked={form.modules.includes(moduleOption.key)}
+                    onChange={() => toggleModule(moduleOption.key)}
                     className="mt-1"
                   />
                   <span className="block">
-                    <span className="block text-sm font-medium text-dark">{addon.label}</span>
-                    <span className="block text-xs text-slate-500">{addon.description}</span>
+                    <span className="block text-sm font-medium text-dark">{moduleOption.label}</span>
+                    <span className="block text-xs text-slate-500">{moduleOption.description}</span>
                   </span>
                 </label>
               ))}

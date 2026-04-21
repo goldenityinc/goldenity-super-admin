@@ -1,5 +1,6 @@
 import httpClient from './httpClient';
 import type { PaginationMeta } from './tenantApi';
+import { mapModulesToLegacyAddons, type SubscriptionModuleKey } from '../constants/subscriptionAddons';
 
 export type SubscriptionTier = 'Standard' | 'Professional' | 'Enterprise' | 'Custom';
 export type AppInstanceStatus = 'ACTIVE' | 'SUSPENDED';
@@ -11,6 +12,7 @@ export type AppInstance = {
   solutionId: string;
   tier: SubscriptionTier;
   addons: string[];
+  moduleKeys?: string[];
   syncMode: SyncMode;
   status: AppInstanceStatus;
   dbConnectionString?: string | null;
@@ -34,6 +36,7 @@ export type CreateAppInstancePayload = {
   tenantId: string;
   solutionId: string;
   tier: SubscriptionTier;
+  moduleKeys?: SubscriptionModuleKey[];
   addons?: string[];
   syncMode?: SyncMode;
   status?: AppInstanceStatus;
@@ -44,6 +47,7 @@ export type CreateAppInstancePayload = {
 
 export type UpdateAppInstancePayload = {
   tier?: SubscriptionTier;
+  moduleKeys?: SubscriptionModuleKey[];
   addons?: string[];
   syncMode?: SyncMode;
   status?: AppInstanceStatus;
@@ -69,7 +73,10 @@ export async function listAppInstances(params: {
 }
 
 export async function createAppInstance(payload: CreateAppInstancePayload): Promise<AppInstance> {
-  const response = await httpClient.post('/app-instances', payload);
+  const response = await httpClient.post('/app-instances', {
+    ...payload,
+    addons: payload.addons ?? mapModulesToLegacyAddons(payload.moduleKeys ?? []),
+  });
   return response.data.data as AppInstance;
 }
 
@@ -77,7 +84,10 @@ export async function updateAppInstance(
   id: string,
   payload: UpdateAppInstancePayload
 ): Promise<AppInstance> {
-  const response = await httpClient.put(`/app-instances/${id}`, payload);
+  const response = await httpClient.put(`/app-instances/${id}`, {
+    ...payload,
+    addons: payload.addons ?? mapModulesToLegacyAddons(payload.moduleKeys ?? []),
+  });
   return response.data.data as AppInstance;
 }
 
