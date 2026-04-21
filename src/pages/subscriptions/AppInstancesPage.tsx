@@ -5,16 +5,17 @@ import { toast } from 'sonner';
 import {
   createAppInstance,
   deleteAppInstance,
+  getAppInstanceModuleCatalog,
   listAppInstances,
   type SyncMode,
   updateAppInstance,
   updateSubscriptionTier,
   type AppInstance,
+  type AppInstanceModuleCatalogItem,
   type AppInstanceStatus,
   type SubscriptionTier,
 } from '../../lib/api/appInstanceApi';
 import {
-  SUBSCRIPTION_MODULE_OPTIONS,
   mapLegacyAddonsToModules,
   mapModulesToLegacyAddons,
   type SubscriptionModuleKey,
@@ -174,6 +175,8 @@ export default function AppInstancesPage() {
   const [editingItem, setEditingItem] = useState<AppInstance | null>(null);
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
+  const [moduleCatalog, setModuleCatalog] = useState<AppInstanceModuleCatalogItem[]>([]);
+  const [moduleCatalogLoading, setModuleCatalogLoading] = useState(false);
 
   const [erpFeatureCatalog, setErpFeatureCatalog] = useState<ErpFeatureDefinition[]>([]);
   const [erpFeatureLoading, setErpFeatureLoading] = useState(false);
@@ -270,11 +273,7 @@ export default function AppInstancesPage() {
       tenantId: item.tenantId,
       solutionId: item.solutionId,
       tier: item.tier,
-      modules: Array.isArray(item.moduleKeys)
-        ? item.moduleKeys.filter((moduleKey): moduleKey is SubscriptionModuleKey =>
-            SUBSCRIPTION_MODULE_OPTIONS.some((def) => def.key === moduleKey),
-          )
-        : mapLegacyAddonsToModules(item.addons),
+      modules: Array.isArray(item.moduleKeys) ? item.moduleKeys : mapLegacyAddonsToModules(item.addons),
       syncMode: item.syncMode ?? 'CLOUD_FIRST',
       status: item.status,
       endDate: toDateInputValue(item.endDate ?? null),
@@ -321,6 +320,27 @@ export default function AppInstancesPage() {
     const slug = (fromEditing ?? fromRefs ?? '').trim();
     return slug && isValidErpOrgIdCandidate(slug) ? slug : undefined;
   };
+
+  useEffect(() => {
+    const loadModuleCatalog = async () => {
+      if (!isModalOpen) {
+        return;
+      }
+
+      setModuleCatalogLoading(true);
+      try {
+        const items = await getAppInstanceModuleCatalog();
+        setModuleCatalog(items);
+      } catch (error: unknown) {
+        setModuleCatalog([]);
+        toast.error(`Gagal memuat katalog modul: ${getApiErrorMessage(error)}`);
+      } finally {
+        setModuleCatalogLoading(false);
+      }
+    };
+
+    void loadModuleCatalog();
+  }, [isModalOpen]);
 
   useEffect(() => {
     const load = async () => {
@@ -924,27 +944,41 @@ export default function AppInstancesPage() {
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="text-sm font-semibold text-dark">Modules (Feature Flags)</p>
             <p className="text-xs text-slate-600">
-              Daftar modul POS yang dikirim sebagai module keys. List ini masih statis sementara sampai endpoint katalog modul tersedia.
+              Daftar modul POS diambil langsung dari katalog modul backend saat modal dibuka.
             </p>
-            <div className="grid gap-2 md:grid-cols-2">
-              {SUBSCRIPTION_MODULE_OPTIONS.map((moduleOption) => (
-                <label
-                  key={moduleOption.key}
-                  className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.modules.includes(moduleOption.key)}
-                    onChange={() => toggleModule(moduleOption.key)}
-                    className="mt-1"
-                  />
-                  <span className="block">
-                    <span className="block text-sm font-medium text-dark">{moduleOption.label}</span>
-                    <span className="block text-xs text-slate-500">{moduleOption.description}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
+            {moduleCatalogLoading ? (
+              <p className="text-sm text-slate-600">Memuat katalog modul...</p>
+            ) : moduleCatalog.length === 0 ? (
+              <p className="text-sm text-slate-600">Katalog modul belum tersedia.</p>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2">
+                {moduleCatalog.map((moduleOption) => (
+                  <label
+                    key={moduleOption.key}
+                    className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.modules.includes(moduleOption.key)}
+                      onChange={() => toggleModule(moduleOption.key)}
+                      className="mt-1"
+                    />
+                    <span className="block">
+                      <span className="flex items-center gap-2 text-sm font-medium text-dark">
+                        <span>{moduleOption.name}</span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                          {moduleOption.status}
+                        </span>
+                      </span>
+                      <span className="block text-xs text-slate-500">{moduleOption.key}</span>
+                      {moduleOption.description ? (
+                        <span className="block text-xs text-slate-500">{moduleOption.description}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           {needsErpFeaturePicker ? (

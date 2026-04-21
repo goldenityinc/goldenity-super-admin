@@ -1,37 +1,4 @@
-export const SUBSCRIPTION_MODULE_OPTIONS = [
-  {
-    key: 'module_sales',
-    label: 'Sales',
-    description: 'Aktifkan transaksi penjualan utama pada POS.',
-  },
-  {
-    key: 'module_inventory',
-    label: 'Inventory',
-    description: 'Aktifkan pengelolaan stok, produk, dan inventaris.',
-  },
-  {
-    key: 'module_finance_reports',
-    label: 'Finance Reports',
-    description: 'Aktifkan laporan keuangan dan cashflow.',
-  },
-  {
-    key: 'module_user_management',
-    label: 'User Management',
-    description: 'Aktifkan pengelolaan user tenant dan staf POS.',
-  },
-  {
-    key: 'module_customer_management',
-    label: 'Customer Management',
-    description: 'Aktifkan master data dan lookup pelanggan.',
-  },
-  {
-    key: 'module_service_orders',
-    label: 'Service Orders',
-    description: 'Aktifkan servis dan pencatatan service order.',
-  },
-] as const;
-
-export type SubscriptionModuleKey = (typeof SUBSCRIPTION_MODULE_OPTIONS)[number]['key'];
+export type SubscriptionModuleKey = string;
 
 const LEGACY_ADDON_TO_MODULE_MAP = {
   service_note: 'module_service_orders',

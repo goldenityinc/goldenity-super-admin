@@ -6,6 +6,13 @@ export type SubscriptionTier = 'Standard' | 'Professional' | 'Enterprise' | 'Cus
 export type AppInstanceStatus = 'ACTIVE' | 'SUSPENDED';
 export type SyncMode = 'CLOUD_FIRST' | 'LOCAL_FIRST' | 'LOCAL_SERVER';
 
+export type AppInstanceModuleCatalogItem = {
+  key: string;
+  name: string;
+  description?: string | null;
+  status: string;
+};
+
 export type AppInstance = {
   id: string;
   tenantId: string;
@@ -101,4 +108,9 @@ export async function updateSubscriptionTier(
 
 export async function deleteAppInstance(id: string): Promise<void> {
   await httpClient.delete(`/app-instances/${id}`);
+}
+
+export async function getAppInstanceModuleCatalog(): Promise<AppInstanceModuleCatalogItem[]> {
+  const response = await httpClient.get('/app-instances/modules/catalog');
+  return response.data.data as AppInstanceModuleCatalogItem[];
 }
