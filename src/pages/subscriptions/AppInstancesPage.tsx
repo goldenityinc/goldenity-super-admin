@@ -47,6 +47,7 @@ type FormState = {
 };
 
 const ERP_SOLUTION_CODE = 'ERP' as const;
+const POS_SOLUTION_CODE = 'POS' as const;
 const ERP_WEB_ORIGIN = (import.meta.env.VITE_ERP_WEB_ORIGIN as string | undefined) ?? '';
 const POS_WEB_ORIGIN = (import.meta.env.VITE_POS_WEB_ORIGIN as string | undefined) ?? '';
 const CLINIC_WEB_ORIGIN = (import.meta.env.VITE_CLINIC_WEB_ORIGIN as string | undefined) ?? '';
@@ -272,6 +273,7 @@ export default function AppInstancesPage() {
   const openCreateModal = () => {
     setEditingItem(null);
     setForm(initialForm);
+    setModuleCatalog([]);
     setErpSelectedFeatures([]);
     setIsModalOpen(true);
   };
@@ -289,6 +291,7 @@ export default function AppInstancesPage() {
     });
 
     // Preload happens via effect when ERP + Custom.
+    setModuleCatalog([]);
     setErpSelectedFeatures([]);
     setIsModalOpen(true);
   };
@@ -301,6 +304,7 @@ export default function AppInstancesPage() {
         setErpSelectedFeatures([]);
       }
       if (field === 'solutionId' && value !== prev.solutionId) {
+        next.modules = [];
         setErpSelectedFeatures([]);
       }
       return next;
@@ -321,6 +325,7 @@ export default function AppInstancesPage() {
 
   const selectedSolution = solutions.find((s) => s.id === form.solutionId);
   const isErpSolution = selectedSolution?.code === ERP_SOLUTION_CODE;
+  const isPosSolution = selectedSolution?.code === POS_SOLUTION_CODE;
   const canUseCustomTier = Boolean(isErpSolution);
   const needsErpFeaturePicker = Boolean(isErpSolution && form.tier === 'Custom');
 
@@ -337,9 +342,15 @@ export default function AppInstancesPage() {
         return;
       }
 
+      if (!form.solutionId) {
+        setModuleCatalog([]);
+        setModuleCatalogLoading(false);
+        return;
+      }
+
       setModuleCatalogLoading(true);
       try {
-        const items = await getAppInstanceModuleCatalog();
+        const items = await getAppInstanceModuleCatalog({ solutionId: form.solutionId });
         setModuleCatalog(items);
       } catch (error: unknown) {
         setModuleCatalog([]);
@@ -350,7 +361,7 @@ export default function AppInstancesPage() {
     };
 
     void loadModuleCatalog();
-  }, [isModalOpen]);
+  }, [form.solutionId, isModalOpen]);
 
   useEffect(() => {
     const load = async () => {
@@ -951,45 +962,54 @@ export default function AppInstancesPage() {
             </label>
           </div>
 
-          <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-sm font-semibold text-dark">Modules (Feature Flags)</p>
-            <p className="text-xs text-slate-600">
-              Daftar modul POS diambil langsung dari katalog modul backend saat modal dibuka.
-            </p>
-            {moduleCatalogLoading ? (
-              <p className="text-sm text-slate-600">Memuat katalog modul...</p>
-            ) : moduleCatalog.length === 0 ? (
-              <p className="text-sm text-slate-600">Katalog modul belum tersedia.</p>
-            ) : (
-              <div className="grid gap-2 md:grid-cols-2">
-                {moduleCatalog.map((moduleOption) => (
-                  <label
-                    key={moduleOption.key}
-                    className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={form.modules.includes(moduleOption.key)}
-                      onChange={() => toggleModule(moduleOption.key)}
-                      className="mt-1"
-                    />
-                    <span className="block">
-                      <span className="flex items-center gap-2 text-sm font-medium text-dark">
-                        <span>{moduleOption.name}</span>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                          {moduleOption.status}
+          {isPosSolution ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-dark">Modules (Feature Flags)</p>
+              <p className="text-xs text-slate-600">
+                Daftar modul POS diambil dari backend sesuai solution yang sedang dipilih.
+              </p>
+              {moduleCatalogLoading ? (
+                <p className="text-sm text-slate-600">Memuat katalog modul...</p>
+              ) : moduleCatalog.length === 0 ? (
+                <p className="text-sm text-slate-600">Katalog modul POS belum tersedia untuk solution ini.</p>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {moduleCatalog.map((moduleOption) => (
+                    <label
+                      key={moduleOption.key}
+                      className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.modules.includes(moduleOption.key)}
+                        onChange={() => toggleModule(moduleOption.key)}
+                        className="mt-1"
+                      />
+                      <span className="block">
+                        <span className="flex items-center gap-2 text-sm font-medium text-dark">
+                          <span>{moduleOption.name}</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                            {moduleOption.status}
+                          </span>
                         </span>
+                        <span className="block text-xs text-slate-500">{moduleOption.key}</span>
+                        {moduleOption.description ? (
+                          <span className="block text-xs text-slate-500">{moduleOption.description}</span>
+                        ) : null}
                       </span>
-                      <span className="block text-xs text-slate-500">{moduleOption.key}</span>
-                      {moduleOption.description ? (
-                        <span className="block text-xs text-slate-500">{moduleOption.description}</span>
-                      ) : null}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : form.solutionId ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-dark">Modules</p>
+              <p className="text-sm text-slate-600">
+                Solution ini tidak memakai katalog modul POS. Jika solution adalah ERP, gunakan pemilih fitur ERP di bawah.
+              </p>
+            </div>
+          ) : null}
 
           {needsErpFeaturePicker ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">

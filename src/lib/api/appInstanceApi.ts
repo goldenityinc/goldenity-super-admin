@@ -110,7 +110,10 @@ export async function deleteAppInstance(id: string): Promise<void> {
   await httpClient.delete(`/app-instances/${id}`);
 }
 
-export async function getAppInstanceModuleCatalog(): Promise<AppInstanceModuleCatalogItem[]> {
-  const response = await httpClient.get('/app-instances/modules/catalog');
+export async function getAppInstanceModuleCatalog(params?: {
+  solutionId?: string;
+  solutionCode?: string;
+}): Promise<AppInstanceModuleCatalogItem[]> {
+  const response = await httpClient.get('/app-instances/modules/catalog', { params });
   return response.data.data as AppInstanceModuleCatalogItem[];
 }
