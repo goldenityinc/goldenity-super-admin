@@ -43,6 +43,30 @@ export type Tenant = {
   updatedAt: string;
 };
 
+export type TenantBranch = {
+  id: string;
+  tenantId: string;
+  name: string;
+  branchCode?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateTenantBranchPayload = {
+  name: string;
+  branchCode?: string;
+  address?: string;
+  phone?: string;
+};
+
+export type UpdateTenantBranchPayload = {
+  branchCode?: string | null;
+  address?: string | null;
+  phone?: string | null;
+};
+
 export async function createTenant(
   payload: CreateTenantPayload
 ): Promise<{ tenant: Tenant; firstAdmin: TenantFirstAdminCredential | null }> {
@@ -79,4 +103,30 @@ export async function uploadTenantLogo(tenantId: string, file: File): Promise<{ 
 export async function updateTenant(tenantId: string, payload: UpdateTenantPayload): Promise<Tenant> {
   const response = await httpClient.put(`/tenants/${encodeURIComponent(tenantId)}`, payload);
   return response.data?.data as Tenant;
+}
+
+export async function listTenantBranches(tenantId: string): Promise<TenantBranch[]> {
+  const response = await httpClient.get(`/tenants/${encodeURIComponent(tenantId)}/branches`);
+  return response.data?.data as TenantBranch[];
+}
+
+export async function createTenantBranch(tenantId: string, payload: CreateTenantBranchPayload): Promise<TenantBranch> {
+  const response = await httpClient.post(`/tenants/${encodeURIComponent(tenantId)}/branches`, payload);
+  return response.data?.data as TenantBranch;
+}
+
+export async function updateTenantBranch(
+  tenantId: string,
+  branchId: string,
+  payload: UpdateTenantBranchPayload
+): Promise<TenantBranch> {
+  const response = await httpClient.put(
+    `/tenants/${encodeURIComponent(tenantId)}/branches/${encodeURIComponent(branchId)}`,
+    payload
+  );
+  return response.data?.data as TenantBranch;
+}
+
+export async function deleteTenantBranch(tenantId: string, branchId: string): Promise<void> {
+  await httpClient.delete(`/tenants/${encodeURIComponent(tenantId)}/branches/${encodeURIComponent(branchId)}`);
 }

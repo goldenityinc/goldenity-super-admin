@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Pencil } from 'lucide-react';
+import { Eye, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   createTenant,
+  listTenantBranches,
   listTenants,
   updateTenant,
   uploadTenantLogo,
@@ -15,6 +16,7 @@ import DataTable from '../../components/common/DataTable';
 import Pagination from '../../components/common/Pagination';
 import TableSkeleton from '../../components/common/TableSkeleton';
 import Modal from '../../components/common/Modal';
+import TenantDetailModal from '../../components/tenants/TenantDetailModal';
 
 type TenantFormState = {
   name: string;
@@ -46,6 +48,10 @@ export default function TenantsPage() {
   const [editIsActive, setEditIsActive] = useState(true);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+  const [branchCounts, setBranchCounts] = useState<Record<string, number>>({});
+
   const [items, setItems] = useState<Tenant[]>([]);
   const [loadingTable, setLoadingTable] = useState(false);
   const [tableError, setTableError] = useState<string | null>(null);
@@ -69,6 +75,19 @@ export default function TenantsPage() {
       });
       setItems(result.items);
       setMeta(result.meta);
+
+      const branchCountEntries = await Promise.all(
+        result.items.map(async (tenant) => {
+          try {
+            const tenantBranches = await listTenantBranches(tenant.id);
+            return [tenant.id, tenantBranches.length] as const;
+          } catch {
+            return [tenant.id, 0] as const;
+          }
+        })
+      );
+
+      setBranchCounts(Object.fromEntries(branchCountEntries));
     } catch (fetchError: unknown) {
       const message = getApiErrorMessage(fetchError);
       setTableError(message);
@@ -148,6 +167,16 @@ export default function TenantsPage() {
 
   const updateEditLogoFile = (file: File | null) => {
     setEditForm((prev) => ({ ...prev, logoFile: file }));
+  };
+
+  const openDetail = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setIsDetailOpen(true);
+  };
+
+  const closeDetail = () => {
+    setIsDetailOpen(false);
+    setSelectedTenant(null);
   };
 
   const onSubmitEdit = async (event: FormEvent<HTMLFormElement>) => {
@@ -306,7 +335,7 @@ export default function TenantsPage() {
           <TableSkeleton rows={5} columns={6} />
         ) : (
           <DataTable
-            headers={['Name', 'Slug', 'Email', 'Status', 'Created At', 'Actions']}
+            headers={['Name', 'Slug', 'Email', 'Cabang', 'Status', 'Created At', 'Actions']}
             hasData={items.length > 0}
             emptyMessage={tableError ?? 'Belum ada tenant.'}
           >
@@ -315,6 +344,11 @@ export default function TenantsPage() {
                 <td className="px-4 py-3 font-medium text-dark">{tenant.name}</td>
                 <td className="px-4 py-3">{tenant.slug}</td>
                 <td className="px-4 py-3">{tenant.email ?? '-'}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                    {typeof branchCounts[tenant.id] === 'number' ? `${branchCounts[tenant.id]} Cabang` : 'Memuat...'}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <span
                     className={[
@@ -329,6 +363,15 @@ export default function TenantsPage() {
                   {new Date(tenant.createdAt).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openDetail(tenant)}
+                      className="rounded-md p-1.5 text-sky-600 hover:bg-sky-50"
+                      title="Detail"
+                    >
+                      <Eye size={16} />
+                    </button>
                   <button
                     type="button"
                     onClick={() => openEdit(tenant)}
@@ -337,6 +380,7 @@ export default function TenantsPage() {
                   >
                     <Pencil size={16} />
                   </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -453,6 +497,15 @@ export default function TenantsPage() {
           </div>
         </form>
       </Modal>
+
+      <TenantDetailModal
+        isOpen={isDetailOpen}
+        tenant={selectedTenant}
+        onClose={closeDetail}
+        onBranchCountChange={(tenantId, count) => {
+          setBranchCounts((prev) => ({ ...prev, [tenantId]: count }));
+        }}
+      />
     </section>
   );
 }
