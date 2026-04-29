@@ -171,7 +171,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
     <>
       <Modal
         isOpen={isOpen}
-        title={tenant ? `Detail Tenant: ${tenant.name}` : 'Detail Tenant'}
+        title={tenant ? `Atur Cabang Tenant: ${tenant.name}` : 'Atur Cabang Tenant'}
         onClose={onClose}
         size="xl"
       >

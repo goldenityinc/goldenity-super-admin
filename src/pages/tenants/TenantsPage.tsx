@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Eye, Pencil } from 'lucide-react';
+import { Building2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   createTenant,
@@ -367,15 +367,16 @@ export default function TenantsPage() {
                     <button
                       type="button"
                       onClick={() => openDetail(tenant)}
-                      className="rounded-md p-1.5 text-sky-600 hover:bg-sky-50"
-                      title="Detail"
+                      className="inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition-colors hover:bg-sky-100"
+                      title="Atur Cabang"
                     >
-                      <Eye size={16} />
+                      <Building2 size={15} />
+                      <span>Atur Cabang</span>
                     </button>
                   <button
                     type="button"
                     onClick={() => openEdit(tenant)}
-                    className="rounded-md p-1.5 text-yellow-600 hover:bg-yellow-50"
+                    className="inline-flex items-center justify-center rounded-md border border-amber-200 bg-amber-50 p-1.5 text-amber-700 transition-colors hover:bg-amber-100"
                     title="Edit"
                   >
                     <Pencil size={16} />
