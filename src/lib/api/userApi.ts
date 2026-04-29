@@ -3,11 +3,12 @@ import type { PaginationMeta } from './tenantApi';
 
 export type CreateUserPayload = {
   tenantId: string;
+  branchId?: string;
   username?: string;
   email?: string;
   password: string;
   name: string;
-  role?: 'TENANT_ADMIN';
+  role?: 'TENANT_ADMIN' | 'CRM_STAFF' | 'CASHIER';
 };
 
 export type UserListItem = {
@@ -15,7 +16,13 @@ export type UserListItem = {
   username?: string | null;
   email?: string | null;
   name: string;
-  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'CRM_MANAGER' | 'CRM_STAFF' | 'READ_ONLY';
+  role:
+    | 'SUPER_ADMIN'
+    | 'TENANT_ADMIN'
+    | 'CRM_MANAGER'
+    | 'CRM_STAFF'
+    | 'CASHIER'
+    | 'READ_ONLY';
   tenantId: string;
   isActive: boolean;
   createdAt: string;

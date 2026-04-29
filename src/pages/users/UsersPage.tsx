@@ -11,7 +11,9 @@ import {
 } from '../../lib/api/userApi';
 import {
   listTenants,
+  listTenantBranches,
   type PaginationMeta,
+  type TenantBranch,
   type Tenant,
 } from '../../lib/api/tenantApi';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
@@ -22,15 +24,17 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 
 type UserFormState = {
   tenantId: string;
+  branchId: string;
   email: string;
   username: string;
   password: string;
   name: string;
-  role: 'TENANT_ADMIN';
+  role: 'TENANT_ADMIN' | 'CRM_STAFF';
 };
 
 const initialForm: UserFormState = {
   tenantId: '',
+  branchId: '',
   email: '',
   username: '',
   password: '',
@@ -46,12 +50,15 @@ type ResetPasswordModal = {
 
 export default function UsersPage() {
   const [form, setForm] = useState<UserFormState>(initialForm);
+  const isCashierRole = form.role === 'CRM_STAFF';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [items, setItems] = useState<UserListItem[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [branches, setBranches] = useState<TenantBranch[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
+  const [loadingBranches, setLoadingBranches] = useState(false);
   const [loadingTable, setLoadingTable] = useState(false);
   const [tableError, setTableError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -110,6 +117,25 @@ export default function UsersPage() {
     }
   }, [meta.limit, page, search, tenantFilter]);
 
+  const fetchBranches = useCallback(async (tenantId: string) => {
+    if (!tenantId) {
+      setBranches([]);
+      return;
+    }
+
+    setLoadingBranches(true);
+    try {
+      const tenantBranches = await listTenantBranches(tenantId);
+      setBranches(Array.isArray(tenantBranches) ? tenantBranches : []);
+    } catch (fetchError: unknown) {
+      setBranches([]);
+      const message = getApiErrorMessage(fetchError);
+      toast.error(`Gagal memuat cabang tenant: ${message}`);
+    } finally {
+      setLoadingBranches(false);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchTenants();
   }, []);
@@ -118,11 +144,26 @@ export default function UsersPage() {
     void fetchUsers();
   }, [fetchUsers]);
 
+  useEffect(() => {
+    if (!isCashierRole || !form.tenantId) {
+      setBranches([]);
+      return;
+    }
+
+    void fetchBranches(form.tenantId);
+  }, [fetchBranches, form.tenantId, isCashierRole]);
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     setSuccessMessage(null);
+
+    if (isCashierRole && !form.branchId) {
+      setSubmitting(false);
+      setError('Pilih cabang terlebih dahulu untuk akun Kasir.');
+      return;
+    }
 
     try {
       const normalizedEmail = form.email.trim().toLowerCase();
@@ -132,6 +173,7 @@ export default function UsersPage() {
 
       const created = await createUser({
         tenantId: form.tenantId,
+        ...(isCashierRole ? { branchId: form.branchId } : {}),
         email: normalizedEmail,
         ...(normalizedUsername ? { username: normalizedUsername } : {}),
         password: form.password,
@@ -164,7 +206,26 @@ export default function UsersPage() {
   };
 
   const updateField = (field: keyof UserFormState, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value as UserFormState[typeof field] }));
+    setForm((prev) => {
+      if (field === 'tenantId') {
+        return {
+          ...prev,
+          tenantId: value,
+          branchId: '',
+        };
+      }
+
+      if (field === 'role') {
+        const nextRole = value as UserFormState['role'];
+        return {
+          ...prev,
+          role: nextRole,
+          branchId: nextRole === 'CRM_STAFF' ? prev.branchId : '',
+        };
+      }
+
+      return { ...prev, [field]: value as UserFormState[typeof field] };
+    });
   };
 
   const openResetModal = (user: UserListItem) => {
@@ -310,18 +371,40 @@ export default function UsersPage() {
             />
           </label>
 
-          <div className="space-y-1 md:col-span-2">
+          <div className="space-y-1">
             <span className="text-sm font-medium text-slate-700">Role</span>
-            <input
-              readOnly
-              value="Admin (TENANT_ADMIN)"
-              className="w-full cursor-not-allowed rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500"
-            />
+            <select
+              value={form.role}
+              onChange={(event) => updateField('role', event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            >
+              <option value="TENANT_ADMIN">Admin (TENANT_ADMIN)</option>
+              <option value="CRM_STAFF">Kasir (CASHIER / CRM_STAFF)</option>
+            </select>
             <p className="text-xs text-slate-500">
-              Super Admin hanya membuat 1 akun Owner/Admin per perusahaan. Akun Kasir dan Auditor
-              dibuat langsung dari dalam aplikasi POS.
+              Pilih Admin untuk owner/manager tenant, atau Kasir untuk akun operasional cabang.
             </p>
           </div>
+
+          {isCashierRole ? (
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Pilih Cabang *</span>
+              <select
+                required={isCashierRole}
+                value={form.branchId}
+                onChange={(event) => updateField('branchId', event.target.value)}
+                disabled={!form.tenantId || loadingBranches}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring disabled:cursor-not-allowed disabled:bg-slate-50"
+              >
+                <option value="">{loadingBranches ? 'Memuat cabang...' : '-- Pilih Cabang --'}</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
