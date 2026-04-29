@@ -50,6 +50,7 @@ export type TenantBranch = {
   branchCode?: string | null;
   address?: string | null;
   phone?: string | null;
+  isMainBranch?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -59,12 +60,14 @@ export type CreateTenantBranchPayload = {
   branchCode?: string;
   address?: string;
   phone?: string;
+  isMainBranch?: boolean;
 };
 
 export type UpdateTenantBranchPayload = {
   branchCode?: string | null;
   address?: string | null;
   phone?: string | null;
+  isMainBranch?: boolean;
 };
 
 export async function createTenant(

@@ -22,6 +22,7 @@ const initialBranchForm: BranchFormState = {
   branchCode: '',
   address: '',
   phone: '',
+  isMainBranch: false,
 };
 
 type TenantDetailModalProps = {
@@ -87,7 +88,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
     void fetchBranches(tenant.id);
   }, [isOpen, tenant]);
 
-  const updateBranchField = (field: keyof BranchFormState, value: string) => {
+  const updateBranchField = <K extends keyof BranchFormState>(field: K, value: BranchFormState[K]) => {
     setBranchForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -103,10 +104,18 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
       branchCode: branch.branchCode ?? '',
       address: branch.address ?? '',
       phone: branch.phone ?? '',
+      isMainBranch: Boolean(branch.isMainBranch),
     });
     setBranchError(null);
     setIsBranchFormOpen(true);
   };
+
+  const currentMainBranch = branches.find((branch) => branch.isMainBranch);
+  const hasOtherMainBranch =
+    branchForm.isMainBranch &&
+    Boolean(
+      currentMainBranch && (!editingBranch || currentMainBranch.id !== editingBranch.id)
+    );
 
   const handleSubmitBranch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -124,6 +133,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
           branchCode: branchForm.branchCode || null,
           address: branchForm.address || null,
           phone: branchForm.phone || null,
+          isMainBranch: branchForm.isMainBranch,
         });
         toast.success('Cabang berhasil diperbarui');
       } else {
@@ -132,6 +142,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
           branchCode: branchForm.branchCode || undefined,
           address: branchForm.address || undefined,
           phone: branchForm.phone || undefined,
+          isMainBranch: branchForm.isMainBranch,
         });
         toast.success('Cabang berhasil ditambahkan');
       }
@@ -234,6 +245,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-4 py-3 font-semibold">Nama Cabang</th>
+                          <th className="px-4 py-3 font-semibold">Tipe</th>
                           <th className="px-4 py-3 font-semibold">Kode</th>
                           <th className="px-4 py-3 font-semibold">Alamat</th>
                           <th className="px-4 py-3 font-semibold">Telepon</th>
@@ -246,6 +258,15 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
                           <tr key={branch.id} className="hover:bg-slate-50/70">
                             <td className="px-4 py-3">
                               <p className="font-medium text-dark">{branch.name}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              {branch.isMainBranch ? (
+                                <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                  Pusat
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">Biasa</span>
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
@@ -338,6 +359,25 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
               className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
             />
           </label>
+
+          <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={branchForm.isMainBranch}
+              onChange={(event) => updateBranchField('isMainBranch', event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+            />
+            <span>
+              <span className="text-sm font-medium text-slate-700">Jadikan sebagai Cabang Pusat</span>
+              <p className="text-xs text-slate-500">Cabang pusat akan ditandai khusus pada daftar cabang tenant.</p>
+            </span>
+          </label>
+
+          {hasOtherMainBranch ? (
+            <p className="text-sm text-amber-600">
+              Sudah ada cabang pusat ({currentMainBranch?.name}). Jika backend mengizinkan hanya satu pusat, status pusat cabang lain perlu dinonaktifkan.
+            </p>
+          ) : null}
 
           {branchError ? <p className="text-sm text-red-600">{branchError}</p> : null}
 
