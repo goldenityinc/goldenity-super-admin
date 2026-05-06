@@ -7,6 +7,7 @@ import { useAuth } from '../context/useAuth';
 const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const TenantsPage = lazy(() => import('../pages/tenants/TenantsPage'));
 const UsersPage = lazy(() => import('../pages/users/UsersPage'));
+const RolesPage = lazy(() => import('../pages/roles/RolesPage'));
 const SolutionsPage = lazy(() => import('../pages/solutions/SolutionsPage'));
 const AppInstancesPage = lazy(() => import('../pages/subscriptions/AppInstancesPage'));
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
@@ -65,6 +66,7 @@ export default function AppRouter() {
         <Route index element={withSuspense(<DashboardPage />)} />
         <Route path="tenants" element={withSuspense(<TenantsPage />)} />
         <Route path="users" element={withSuspense(<UsersPage />)} />
+        <Route path="roles" element={withSuspense(<RolesPage />)} />
         <Route path="solutions" element={withSuspense(<SolutionsPage />)} />
         <Route path="subscriptions" element={withSuspense(<AppInstancesPage />)} />
         <Route path="settings" element={withSuspense(<SettingsPage />)} />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,6 +23,7 @@ const initialBranchForm: BranchFormState = {
   address: '',
   phone: '',
   isMainBranch: false,
+  isBlindCloseEnabled: true,
 };
 
 type TenantDetailModalProps = {
@@ -57,7 +58,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
     resetBranchForm();
   };
 
-  const fetchBranches = async (tenantId: string) => {
+  const fetchBranches = useCallback(async (tenantId: string) => {
     setBranchesLoading(true);
     setBranchesError(null);
 
@@ -72,7 +73,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
     } finally {
       setBranchesLoading(false);
     }
-  };
+  }, [onBranchCountChange]);
 
   useEffect(() => {
     if (!isOpen || !tenant) {
@@ -86,7 +87,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
     }
 
     void fetchBranches(tenant.id);
-  }, [isOpen, tenant]);
+  }, [fetchBranches, isOpen, tenant]);
 
   const updateBranchField = <K extends keyof BranchFormState>(field: K, value: BranchFormState[K]) => {
     setBranchForm((prev) => ({ ...prev, [field]: value }));
@@ -105,6 +106,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
       address: branch.address ?? '',
       phone: branch.phone ?? '',
       isMainBranch: Boolean(branch.isMainBranch),
+      isBlindCloseEnabled: branch.isBlindCloseEnabled ?? true,
     });
     setBranchError(null);
     setIsBranchFormOpen(true);
@@ -134,6 +136,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
           address: branchForm.address || null,
           phone: branchForm.phone || null,
           isMainBranch: branchForm.isMainBranch,
+          isBlindCloseEnabled: branchForm.isBlindCloseEnabled,
         });
         toast.success('Cabang berhasil diperbarui');
       } else {
@@ -143,6 +146,7 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
           address: branchForm.address || undefined,
           phone: branchForm.phone || undefined,
           isMainBranch: branchForm.isMainBranch,
+          isBlindCloseEnabled: branchForm.isBlindCloseEnabled,
         });
         toast.success('Cabang berhasil ditambahkan');
       }
@@ -370,6 +374,19 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
             <span>
               <span className="text-sm font-medium text-slate-700">Jadikan sebagai Cabang Pusat</span>
               <p className="text-xs text-slate-500">Cabang pusat akan ditandai khusus pada daftar cabang tenant.</p>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={branchForm.isBlindCloseEnabled ?? true}
+              onChange={(event) => updateBranchField('isBlindCloseEnabled', event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+            />
+            <span>
+              <span className="text-sm font-medium text-slate-700">Terapkan Blind Close Shift</span>
+              <p className="text-xs text-slate-500">Aktifkan agar fitur blind close shift otomatis diterapkan di cabang ini.</p>
             </span>
           </label>
 

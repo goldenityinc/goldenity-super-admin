@@ -51,6 +51,7 @@ export type TenantBranch = {
   address?: string | null;
   phone?: string | null;
   isMainBranch?: boolean;
+  isBlindCloseEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -61,6 +62,7 @@ export type CreateTenantBranchPayload = {
   address?: string;
   phone?: string;
   isMainBranch?: boolean;
+  isBlindCloseEnabled?: boolean;
 };
 
 export type UpdateTenantBranchPayload = {
@@ -68,6 +70,7 @@ export type UpdateTenantBranchPayload = {
   address?: string | null;
   phone?: string | null;
   isMainBranch?: boolean;
+  isBlindCloseEnabled?: boolean;
 };
 
 export async function createTenant(
