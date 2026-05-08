@@ -1,5 +1,23 @@
 export type SubscriptionModuleKey = string;
 
+export type SubscriptionModuleDefinition = {
+  key: SubscriptionModuleKey;
+  name: string;
+  description?: string;
+};
+
+export const REMOVED_SUBSCRIPTION_MODULE_KEYS: SubscriptionModuleKey[] = ['module_service_receipt_printing'];
+
+export const ADDED_SUBSCRIPTION_MODULES: SubscriptionModuleDefinition[] = [
+  {
+    key: 'module_shift_history',
+    name: 'Shift History',
+    description: 'Laporan aktivitas shift kasir.',
+  },
+];
+
+const SHIFT_HISTORY_INSERT_AFTER_KEYS: SubscriptionModuleKey[] = ['module_sales_history', 'module_finance_reports'];
+
 export const TIER_DEFAULT_MODULES: Record<
   'Standard' | 'Professional' | 'Enterprise',
   SubscriptionModuleKey[]
@@ -37,7 +55,7 @@ export const TIER_DEFAULT_MODULES: Record<
     'module_realtime_sync',
     'module_category_management',
     'module_receipt_printing',
-    'module_service_receipt_printing',
+    'module_shift_history',
   ],
 };
 
@@ -79,4 +97,45 @@ export function mapModulesToLegacyAddons(modules: SubscriptionModuleKey[]): stri
   }
 
   return [...new Set(mapped)];
+}
+
+export function sanitizeSubscriptionModules(modules: SubscriptionModuleKey[]): SubscriptionModuleKey[] {
+  return [...new Set(modules)].filter((moduleKey) => !REMOVED_SUBSCRIPTION_MODULE_KEYS.includes(moduleKey));
+}
+
+export function mergeSubscriptionModuleCatalog<
+  T extends {
+    key: SubscriptionModuleKey;
+    name: string;
+    description?: string | null;
+  },
+>(catalog: T[]): T[] {
+  const sanitizedCatalog = catalog.filter(
+    (moduleItem) => !REMOVED_SUBSCRIPTION_MODULE_KEYS.includes(moduleItem.key)
+  );
+  const merged = [...sanitizedCatalog];
+
+  for (const addedModule of ADDED_SUBSCRIPTION_MODULES) {
+    const existingIndex = merged.findIndex((moduleItem) => moduleItem.key === addedModule.key);
+    const nextItem = {
+      ...(existingIndex >= 0 ? merged[existingIndex] : {}),
+      ...addedModule,
+    } as T;
+
+    if (existingIndex >= 0) {
+      merged.splice(existingIndex, 1);
+    }
+
+    const insertAfterIndex = merged.findIndex((moduleItem) =>
+      SHIFT_HISTORY_INSERT_AFTER_KEYS.includes(moduleItem.key)
+    );
+
+    if (insertAfterIndex >= 0) {
+      merged.splice(insertAfterIndex + 1, 0, nextItem);
+    } else {
+      merged.push(nextItem);
+    }
+  }
+
+  return merged;
 }

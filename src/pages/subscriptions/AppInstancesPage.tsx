@@ -16,8 +16,10 @@ import {
   type SubscriptionTier,
 } from '../../lib/api/appInstanceApi';
 import {
+  mergeSubscriptionModuleCatalog,
   mapLegacyAddonsToModules,
   mapModulesToLegacyAddons,
+  sanitizeSubscriptionModules,
   TIER_DEFAULT_MODULES,
   type SubscriptionModuleKey,
 } from '../../lib/constants/subscriptionAddons';
@@ -162,7 +164,7 @@ function getTierTemplateModules(tier: SubscriptionTier): SubscriptionModuleKey[]
     return [];
   }
 
-  return [...new Set(TIER_DEFAULT_MODULES[tier])];
+  return sanitizeSubscriptionModules(TIER_DEFAULT_MODULES[tier]);
 }
 
 export default function AppInstancesPage() {
@@ -284,7 +286,9 @@ export default function AppInstancesPage() {
       tenantId: item.tenantId,
       solutionId: item.solutionId,
       tier: item.tier,
-      modules: Array.isArray(item.moduleKeys) ? item.moduleKeys : mapLegacyAddonsToModules(item.addons),
+      modules: sanitizeSubscriptionModules(
+        Array.isArray(item.moduleKeys) ? item.moduleKeys : mapLegacyAddonsToModules(item.addons)
+      ),
       syncMode: item.syncMode ?? 'CLOUD_FIRST',
       status: item.status,
       endDate: toDateInputValue(item.endDate ?? null),
@@ -316,12 +320,17 @@ export default function AppInstancesPage() {
       const hasModule = prev.modules.includes(moduleKey);
       return {
         ...prev,
-        modules: hasModule
-          ? prev.modules.filter((item) => item !== moduleKey)
-          : [...prev.modules, moduleKey],
+        modules: sanitizeSubscriptionModules(
+          hasModule ? prev.modules.filter((item) => item !== moduleKey) : [...prev.modules, moduleKey]
+        ),
       };
     });
   };
+
+  const normalizedModuleCatalog = useMemo(
+    () => mergeSubscriptionModuleCatalog(moduleCatalog),
+    [moduleCatalog]
+  );
 
   const selectedSolution = solutions.find((s) => s.id === form.solutionId);
   const isErpSolution = selectedSolution?.code === ERP_SOLUTION_CODE;
@@ -351,7 +360,7 @@ export default function AppInstancesPage() {
       setModuleCatalogLoading(true);
       try {
         const items = await getAppInstanceModuleCatalog({ solutionId: form.solutionId });
-        setModuleCatalog(items);
+        setModuleCatalog(mergeSubscriptionModuleCatalog(items));
       } catch (error: unknown) {
         setModuleCatalog([]);
         toast.error(`Gagal memuat katalog modul: ${getApiErrorMessage(error)}`);
@@ -527,10 +536,11 @@ export default function AppInstancesPage() {
       }
 
       if (editingItem) {
+        const moduleKeys = sanitizeSubscriptionModules(form.modules);
         await updateAppInstance(editingItem.id, {
           tier: form.tier,
-          moduleKeys: form.modules,
-          addons: mapModulesToLegacyAddons(form.modules),
+          moduleKeys,
+          addons: mapModulesToLegacyAddons(moduleKeys),
           syncMode: form.syncMode,
           status: form.status,
           endDate: form.endDate ? form.endDate : null,
@@ -541,12 +551,13 @@ export default function AppInstancesPage() {
         }
         toast.success('Subscription berhasil diupdate');
       } else {
+        const moduleKeys = sanitizeSubscriptionModules(form.modules);
         const created = await createAppInstance({
           tenantId: form.tenantId,
           solutionId: form.solutionId,
           tier: form.tier,
-          moduleKeys: form.modules,
-          addons: mapModulesToLegacyAddons(form.modules),
+          moduleKeys,
+          addons: mapModulesToLegacyAddons(moduleKeys),
           syncMode: form.syncMode,
           status: form.status,
           endDate: form.endDate ? form.endDate : null,
@@ -970,11 +981,11 @@ export default function AppInstancesPage() {
               </p>
               {moduleCatalogLoading ? (
                 <p className="text-sm text-slate-600">Memuat katalog modul...</p>
-              ) : moduleCatalog.length === 0 ? (
+              ) : normalizedModuleCatalog.length === 0 ? (
                 <p className="text-sm text-slate-600">Katalog modul POS belum tersedia untuk solution ini.</p>
               ) : (
                 <div className="grid gap-2 md:grid-cols-2">
-                  {moduleCatalog.map((moduleOption) => (
+                  {normalizedModuleCatalog.map((moduleOption) => (
                     <label
                       key={moduleOption.key}
                       className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
