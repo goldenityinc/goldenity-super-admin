@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Building2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,6 +23,7 @@ type TenantFormState = {
   slug: string;
   email: string;
   phone: string;
+  firstBranchName: string;
   address: string;
   logoFile: File | null;
 };
@@ -32,6 +33,7 @@ const initialForm: TenantFormState = {
   slug: '',
   email: '',
   phone: '',
+  firstBranchName: '',
   address: '',
   logoFile: null,
 };
@@ -113,6 +115,7 @@ export default function TenantsPage() {
         slug: form.slug || undefined,
         email: form.email || undefined,
         phone: form.phone || undefined,
+        firstBranchName: form.firstBranchName || undefined,
         address: form.address || undefined,
       });
 
@@ -155,6 +158,7 @@ export default function TenantsPage() {
       slug: tenant.slug,
       email: tenant.email ?? '',
       phone: tenant.phone ?? '',
+      firstBranchName: '',
       address: tenant.address ?? '',
       logoFile: null,
     });
@@ -178,6 +182,10 @@ export default function TenantsPage() {
     setIsDetailOpen(false);
     setSelectedTenant(null);
   };
+
+  const handleBranchCountChange = useCallback((tenantId: string, count: number) => {
+    setBranchCounts((prev) => ({ ...prev, [tenantId]: count }));
+  }, []);
 
   const onSubmitEdit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -257,6 +265,16 @@ export default function TenantsPage() {
             <input
               value={form.phone}
               onChange={(event) => updateField('phone', event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Nama Cabang Pertama</span>
+            <input
+              value={form.firstBranchName}
+              onChange={(event) => updateField('firstBranchName', event.target.value)}
+              placeholder="Opsional, contoh: Cabang Pusat"
               className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
             />
           </label>
@@ -503,9 +521,7 @@ export default function TenantsPage() {
         isOpen={isDetailOpen}
         tenant={selectedTenant}
         onClose={closeDetail}
-        onBranchCountChange={(tenantId, count) => {
-          setBranchCounts((prev) => ({ ...prev, [tenantId]: count }));
-        }}
+        onBranchCountChange={handleBranchCountChange}
       />
     </section>
   );

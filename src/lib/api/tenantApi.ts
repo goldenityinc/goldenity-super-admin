@@ -12,6 +12,7 @@ export type CreateTenantPayload = {
   slug?: string;
   email?: string;
   phone?: string;
+  firstBranchName?: string;
   address?: string;
 };
 
@@ -113,7 +114,22 @@ export async function updateTenant(tenantId: string, payload: UpdateTenantPayloa
 
 export async function listTenantBranches(tenantId: string): Promise<TenantBranch[]> {
   const response = await httpClient.get(`/tenants/${encodeURIComponent(tenantId)}/branches`);
-  return response.data?.data as TenantBranch[];
+
+  const payload = response.data?.data ?? response.data;
+
+  if (Array.isArray(payload)) {
+    return payload as TenantBranch[];
+  }
+
+  if (Array.isArray(payload?.branches)) {
+    return payload.branches as TenantBranch[];
+  }
+
+  if (Array.isArray(payload?.items)) {
+    return payload.items as TenantBranch[];
+  }
+
+  return [];
 }
 
 export async function createTenantBranch(tenantId: string, payload: CreateTenantBranchPayload): Promise<TenantBranch> {

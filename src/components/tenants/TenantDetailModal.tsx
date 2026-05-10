@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -58,25 +58,10 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
     resetBranchForm();
   };
 
-  const fetchBranches = useCallback(async (tenantId: string) => {
-    setBranchesLoading(true);
-    setBranchesError(null);
-
-    try {
-      const tenantBranches = await listTenantBranches(tenantId);
-      setBranches(tenantBranches);
-      onBranchCountChange?.(tenantId, tenantBranches.length);
-    } catch (fetchError: unknown) {
-      const message = getApiErrorMessage(fetchError);
-      setBranchesError(message);
-      toast.error(message);
-    } finally {
-      setBranchesLoading(false);
-    }
-  }, [onBranchCountChange]);
+  const tenantId = tenant?.id;
 
   useEffect(() => {
-    if (!isOpen || !tenant) {
+    if (!tenantId) {
       setBranches([]);
       setBranchesError(null);
       setBranchesLoading(false);
@@ -86,8 +71,41 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
       return;
     }
 
-    void fetchBranches(tenant.id);
-  }, [fetchBranches, isOpen, tenant]);
+    let isCancelled = false;
+
+    const fetchBranches = async () => {
+      setBranchesLoading(true);
+      setBranchesError(null);
+
+      try {
+        const tenantBranches = await listTenantBranches(tenantId);
+        if (isCancelled) {
+          return;
+        }
+
+        setBranches(tenantBranches);
+        onBranchCountChange?.(tenantId, tenantBranches.length);
+      } catch (fetchError: unknown) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message = getApiErrorMessage(fetchError);
+        setBranchesError(message);
+        toast.error(message);
+      } finally {
+        if (!isCancelled) {
+          setBranchesLoading(false);
+        }
+      }
+    };
+
+    void fetchBranches();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [onBranchCountChange, tenantId]);
 
   const updateBranchField = <K extends keyof BranchFormState>(field: K, value: BranchFormState[K]) => {
     setBranchForm((prev) => ({ ...prev, [field]: value }));
@@ -152,7 +170,9 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
       }
 
       closeBranchForm();
-      await fetchBranches(tenant.id);
+      const tenantBranches = await listTenantBranches(tenant.id);
+      setBranches(tenantBranches);
+      onBranchCountChange?.(tenant.id, tenantBranches.length);
     } catch (submitError: unknown) {
       const message = getApiErrorMessage(submitError);
       setBranchError(message);
@@ -172,7 +192,9 @@ export default function TenantDetailModal({ isOpen, tenant, onClose, onBranchCou
       await deleteTenantBranch(tenant.id, deletingBranch.id);
       toast.success('Cabang berhasil dihapus');
       setDeletingBranch(null);
-      await fetchBranches(tenant.id);
+      const tenantBranches = await listTenantBranches(tenant.id);
+      setBranches(tenantBranches);
+      onBranchCountChange?.(tenant.id, tenantBranches.length);
     } catch (deleteError: unknown) {
       toast.error(getApiErrorMessage(deleteError));
     } finally {
