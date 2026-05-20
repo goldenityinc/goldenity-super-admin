@@ -9,6 +9,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://goldenity-admin-core-backend-production.up.railway.app/api/$1"
+    },
+    {
       "source": "/admin/assets/(.*)",
       "destination": "/assets/$1"
     },
