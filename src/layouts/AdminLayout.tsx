@@ -1,4 +1,16 @@
-import { Home, Building2, Users, Layers3, Link2, Settings, Menu, X, LogOut, Download } from 'lucide-react';
+import {
+  Home,
+  Building2,
+  Users,
+  Layers3,
+  Link2,
+  Settings,
+  Menu,
+  X,
+  LogOut,
+  Download,
+  ClipboardList,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentType } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
@@ -10,15 +22,29 @@ type SidebarItem = {
   icon: ComponentType<{ className?: string }>;
 };
 
-const menuItems: SidebarItem[] = [
-  { to: '/', label: 'Dashboard', icon: Home },
-  { to: '/tenants', label: 'Tenants', icon: Building2 },
-  { to: '/users', label: 'Users', icon: Users },
-  { to: '/roles', label: 'Roles', icon: Users },
-  { to: '/solutions', label: 'Solutions', icon: Layers3 },
-  { to: '/subscriptions', label: 'Subscriptions', icon: Link2 },
-  { to: '/settings', label: 'Settings', icon: Settings },
-  { to: '/downloads', label: 'Downloads', icon: Download },
+type SidebarSection = {
+  title: string;
+  items: SidebarItem[];
+};
+
+const menuSections: SidebarSection[] = [
+  {
+    title: 'General',
+    items: [
+      { to: '/', label: 'Dashboard', icon: Home },
+      { to: '/tenants', label: 'Tenants', icon: Building2 },
+      { to: '/users', label: 'Users', icon: Users },
+      { to: '/roles', label: 'Roles', icon: Users },
+      { to: '/solutions', label: 'Solutions', icon: Layers3 },
+      { to: '/subscriptions', label: 'Subscriptions', icon: Link2 },
+      { to: '/settings', label: 'Settings', icon: Settings },
+      { to: '/downloads', label: 'Downloads', icon: Download },
+    ],
+  },
+  {
+    title: 'Transactions / Sales',
+    items: [{ to: '/sales/pre-orders', label: 'Pre-Order', icon: ClipboardList }],
+  },
 ];
 
 export default function AdminLayout() {
@@ -52,29 +78,36 @@ export default function AdminLayout() {
             </button>
           </div>
 
-          <nav className="space-y-1 px-3 py-4">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  onClick={closeMobile}
-                  className={({ isActive }) =>
-                    [
-                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-primary text-white'
-                        : 'text-slate-200 hover:bg-slate-800 hover:text-white',
-                    ].join(' ')
-                  }
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </NavLink>
-              );
-            })}
+          <nav className="space-y-3 px-3 py-4">
+            {menuSections.map((section) => (
+              <div key={section.title} className="space-y-1">
+                <p className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  {section.title}
+                </p>
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.to === '/'}
+                      onClick={closeMobile}
+                      className={({ isActive }) =>
+                        [
+                          'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-primary text-white'
+                            : 'text-slate-200 hover:bg-slate-800 hover:text-white',
+                        ].join(' ')
+                      }
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
         </aside>
 

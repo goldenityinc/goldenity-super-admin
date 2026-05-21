@@ -14,9 +14,20 @@ export const ADDED_SUBSCRIPTION_MODULES: SubscriptionModuleDefinition[] = [
     name: 'Shift History',
     description: 'Laporan aktivitas shift kasir.',
   },
+  {
+    key: 'module_pre_order_dp',
+    name: 'Modul Pre-Order & DP',
+    description: 'Kelola transaksi pre-order, uang muka (DP), dan status pengambilan pesanan.',
+  },
 ];
 
 const SHIFT_HISTORY_INSERT_AFTER_KEYS: SubscriptionModuleKey[] = ['module_sales_history', 'module_finance_reports'];
+const PRE_ORDER_INSERT_AFTER_KEYS: SubscriptionModuleKey[] = ['module_sales', 'module_sales_history'];
+
+const ADDED_MODULE_INSERT_AFTER_MAP: Record<SubscriptionModuleKey, SubscriptionModuleKey[]> = {
+  module_shift_history: SHIFT_HISTORY_INSERT_AFTER_KEYS,
+  module_pre_order_dp: PRE_ORDER_INSERT_AFTER_KEYS,
+};
 
 export const TIER_DEFAULT_MODULES: Record<
   'Standard' | 'Professional' | 'Enterprise',
@@ -126,9 +137,8 @@ export function mergeSubscriptionModuleCatalog<
       merged.splice(existingIndex, 1);
     }
 
-    const insertAfterIndex = merged.findIndex((moduleItem) =>
-      SHIFT_HISTORY_INSERT_AFTER_KEYS.includes(moduleItem.key)
-    );
+    const insertAfterKeys = ADDED_MODULE_INSERT_AFTER_MAP[addedModule.key] ?? [];
+    const insertAfterIndex = merged.findIndex((moduleItem) => insertAfterKeys.includes(moduleItem.key));
 
     if (insertAfterIndex >= 0) {
       merged.splice(insertAfterIndex + 1, 0, nextItem);

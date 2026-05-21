@@ -12,6 +12,7 @@ const SolutionsPage = lazy(() => import('../pages/solutions/SolutionsPage'));
 const AppInstancesPage = lazy(() => import('../pages/subscriptions/AppInstancesPage'));
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
 const DownloadsPage = lazy(() => import('../pages/downloads/DownloadsPage'));
+const PreOrdersPage = lazy(() => import('../pages/sales/PreOrdersPage'));
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const UnauthorizedPage = lazy(() => import('../pages/auth/UnauthorizedPage'));
 
@@ -71,6 +72,7 @@ export default function AppRouter() {
         <Route path="subscriptions" element={withSuspense(<AppInstancesPage />)} />
         <Route path="settings" element={withSuspense(<SettingsPage />)} />
         <Route path="downloads" element={withSuspense(<DownloadsPage />)} />
+        <Route path="sales/pre-orders" element={withSuspense(<PreOrdersPage />)} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
