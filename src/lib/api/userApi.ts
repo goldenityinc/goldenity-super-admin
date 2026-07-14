@@ -9,6 +9,18 @@ export type CreateUserPayload = {
   password: string;
   name: string;
   role?: 'TENANT_ADMIN' | 'CRM_STAFF' | 'CASHIER';
+  allowedSolutions?: string[];
+};
+
+export type UpdateUserPayload = {
+  tenantId?: string;
+  branchId?: string;
+  username?: string;
+  email?: string;
+  password?: string;
+  name?: string;
+  role?: 'TENANT_ADMIN' | 'CRM_STAFF' | 'CASHIER';
+  allowedSolutions?: string[];
 };
 
 export type UserListItem = {
@@ -24,6 +36,8 @@ export type UserListItem = {
     | 'CASHIER'
     | 'READ_ONLY';
   tenantId: string;
+  branchId?: string | null;
+  allowedSolutions?: string[] | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -36,6 +50,11 @@ export type UserListItem = {
 
 export async function createUser(payload: CreateUserPayload): Promise<UserListItem> {
   const response = await httpClient.post('/users', payload);
+  return response.data.data as UserListItem;
+}
+
+export async function updateUser(userId: string, payload: UpdateUserPayload): Promise<UserListItem> {
+  const response = await httpClient.patch(`/users/${userId}`, payload);
   return response.data.data as UserListItem;
 }
 

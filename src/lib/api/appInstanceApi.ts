@@ -46,6 +46,7 @@ export type CreateAppInstancePayload = {
   solution?: 'POS' | 'ERP' | 'MEDICAL' | 'SCHOOL_ERP' | string;
   tier: SubscriptionTier;
   moduleKeys?: SubscriptionModuleKey[];
+  modules?: string[];
   activeModules?: string[];
   addons?: string[];
   syncMode?: SyncMode;
@@ -59,6 +60,7 @@ export type UpdateAppInstancePayload = {
   solution?: 'POS' | 'ERP' | 'MEDICAL' | 'SCHOOL_ERP' | string;
   tier?: SubscriptionTier;
   moduleKeys?: SubscriptionModuleKey[];
+  modules?: string[];
   activeModules?: string[];
   addons?: string[];
   syncMode?: SyncMode;

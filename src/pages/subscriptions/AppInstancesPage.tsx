@@ -64,6 +64,12 @@ const SOLUTION_OPTIONS: { code: SolutionCode; backendCodes: string[] }[] = [
   { code: MEDICAL_SOLUTION_CODE, backendCodes: [MEDICAL_SOLUTION_CODE, CLINIC_SOLUTION_CODE] },
   { code: SCHOOL_ERP_SOLUTION_CODE, backendCodes: [SCHOOL_ERP_SOLUTION_CODE] },
 ];
+const EDIT_TAB_ORDER: SolutionCode[] = [
+  POS_SOLUTION_CODE,
+  SCHOOL_ERP_SOLUTION_CODE,
+  ERP_SOLUTION_CODE,
+  MEDICAL_SOLUTION_CODE,
+];
 const SCHOOL_ERP_MODULE_OPTIONS: SchoolErpModule[] = ['ACADEMICS', 'FINANCE'];
 const ERP_WEB_ORIGIN = (import.meta.env.VITE_ERP_WEB_ORIGIN as string | undefined) ?? '';
 const POS_WEB_ORIGIN = (import.meta.env.VITE_POS_WEB_ORIGIN as string | undefined) ?? '';
@@ -468,6 +474,18 @@ export default function AppInstancesPage() {
   const isSchoolErpSolution = form.solutionCode === SCHOOL_ERP_SOLUTION_CODE;
   const canUseCustomTier = Boolean(isErpSolution);
   const needsErpFeaturePicker = Boolean(isErpSolution && form.tier === 'Custom');
+  const editSolutionTabs = useMemo(() => {
+    if (!editingItem) return [] as SolutionCode[];
+
+    const availableCodes = new Set<SolutionCode>();
+    for (const instance of items) {
+      if (instance.tenantId !== editingItem.tenantId) continue;
+      const code = normalizeSolutionCode(instance.solution.code);
+      if (code) availableCodes.add(code);
+    }
+
+    return EDIT_TAB_ORDER.filter((code) => availableCodes.has(code));
+  }, [editingItem, items]);
 
   const resolveErpOrganizationId = () => {
     const fromEditing = editingItem?.tenant?.slug;
@@ -691,12 +709,13 @@ export default function AppInstancesPage() {
 
       if (editingItem) {
         const moduleKeys = isPosSolution ? sanitizeSubscriptionModules(form.modules) : [];
-        const activeModules = isSchoolErpSolution ? form.activeModules : [];
+        const schoolModules = isSchoolErpSolution ? [...form.activeModules] : [];
         await updateAppInstance(editingItem.id, {
           solution: form.solutionCode,
           tier: form.tier,
           moduleKeys,
-          activeModules,
+          modules: schoolModules,
+          activeModules: schoolModules,
           addons: mapModulesToLegacyAddons(moduleKeys),
           syncMode: form.syncMode,
           status: form.status,
@@ -709,14 +728,15 @@ export default function AppInstancesPage() {
         toast.success('Subscription berhasil diupdate');
       } else {
         const moduleKeys = isPosSolution ? sanitizeSubscriptionModules(form.modules) : [];
-        const activeModules = isSchoolErpSolution ? form.activeModules : [];
+        const schoolModules = isSchoolErpSolution ? [...form.activeModules] : [];
         const created = await createAppInstance({
           tenantId: form.tenantId,
           solutionId: form.solutionId,
           solution: form.solutionCode,
           tier: form.tier,
           moduleKeys,
-          activeModules,
+          modules: schoolModules,
+          activeModules: schoolModules,
           addons: mapModulesToLegacyAddons(moduleKeys),
           syncMode: form.syncMode,
           status: form.status,
@@ -1063,6 +1083,29 @@ export default function AppInstancesPage() {
         size="lg"
       >
         <form onSubmit={onSubmit} className="space-y-4">
+          {editingItem ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-slate-700">Solution</p>
+              <div className="flex flex-wrap gap-2">
+                {editSolutionTabs.map((code) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => onChangeSolutionCode(code)}
+                    className={[
+                      'rounded-md border px-3 py-1.5 text-sm font-medium transition-colors',
+                      form.solutionCode === code
+                        ? 'border-primary bg-primary text-white'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
+                    ].join(' ')}
+                  >
+                    {code}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1">
               <span className="text-sm font-medium text-slate-700">Tenant *</span>
@@ -1082,25 +1125,27 @@ export default function AppInstancesPage() {
               </select>
             </label>
 
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-slate-700">Solution *</span>
-              <select
-                required
-                value={form.solutionCode}
-                onChange={(event) =>
-                  onChangeSolutionCode(event.target.value as '' | SolutionCode)
-                }
-                disabled={loadingRefs}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-              >
-                <option value="">-- Select Solution --</option>
-                {SOLUTION_OPTIONS.map((option) => (
-                  <option key={option.code} value={option.code}>
-                    {option.code}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!editingItem ? (
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-slate-700">Solution *</span>
+                <select
+                  required
+                  value={form.solutionCode}
+                  onChange={(event) =>
+                    onChangeSolutionCode(event.target.value as '' | SolutionCode)
+                  }
+                  disabled={loadingRefs}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+                >
+                  <option value="">-- Select Solution --</option>
+                  {SOLUTION_OPTIONS.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <label className="space-y-1">
               <span className="text-sm font-medium text-slate-700">Tier *</span>

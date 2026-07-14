@@ -7,6 +7,7 @@ import {
   resetUserPassword,
   toggleUserActive,
   deleteUser,
+  updateUser,
   type UserListItem,
 } from '../../lib/api/userApi';
 import {
@@ -16,11 +17,32 @@ import {
   type TenantBranch,
   type Tenant,
 } from '../../lib/api/tenantApi';
+import { listAppInstances } from '../../lib/api/appInstanceApi';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
 import DataTable from '../../components/common/DataTable';
 import Pagination from '../../components/common/Pagination';
 import TableSkeleton from '../../components/common/TableSkeleton';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+
+type PortalCode = 'POS' | 'SCHOOL_ERP' | 'ERP' | 'MEDICAL';
+
+function normalizePortalCode(code: string | null | undefined): PortalCode | null {
+  if (!code) return null;
+  const normalized = code.trim().toUpperCase();
+  if (normalized === 'POS') return 'POS';
+  if (normalized === 'SCHOOL_ERP') return 'SCHOOL_ERP';
+  if (normalized === 'ERP') return 'ERP';
+  if (normalized === 'MEDICAL' || normalized === 'CLINIC') return 'MEDICAL';
+  return null;
+}
+
+function normalizeAllowedPortals(value: unknown): PortalCode[] {
+  if (!Array.isArray(value)) return [];
+  const parsed = value
+    .map((item) => (typeof item === 'string' ? normalizePortalCode(item) : null))
+    .filter((item): item is PortalCode => item !== null);
+  return [...new Set(parsed)];
+}
 
 type UserFormState = {
   tenantId: string;
@@ -30,6 +52,7 @@ type UserFormState = {
   password: string;
   name: string;
   role: 'TENANT_ADMIN' | 'CRM_STAFF';
+  allowedSolutions: PortalCode[];
 };
 
 const initialForm: UserFormState = {
@@ -40,6 +63,7 @@ const initialForm: UserFormState = {
   password: '',
   name: '',
   role: 'TENANT_ADMIN',
+  allowedSolutions: [],
 };
 
 type ResetPasswordModal = {
@@ -51,14 +75,17 @@ type ResetPasswordModal = {
 export default function UsersPage() {
   const [form, setForm] = useState<UserFormState>(initialForm);
   const isCashierRole = form.role === 'CRM_STAFF';
+  const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [items, setItems] = useState<UserListItem[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [branches, setBranches] = useState<TenantBranch[]>([]);
+  const [portalOptions, setPortalOptions] = useState<PortalCode[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
   const [loadingBranches, setLoadingBranches] = useState(false);
+  const [loadingPortals, setLoadingPortals] = useState(false);
   const [loadingTable, setLoadingTable] = useState(false);
   const [tableError, setTableError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -136,6 +163,37 @@ export default function UsersPage() {
     }
   }, []);
 
+  const fetchTenantPortals = useCallback(async (tenantId: string) => {
+    if (!tenantId) {
+      setPortalOptions([]);
+      return;
+    }
+
+    setLoadingPortals(true);
+    try {
+      const first = await listAppInstances({ page: 1, limit: 100, tenantId });
+      let allItems = first.items;
+      for (let nextPage = 2; nextPage <= first.meta.totalPages; nextPage += 1) {
+        const pageResult = await listAppInstances({ page: nextPage, limit: 100, tenantId });
+        allItems = allItems.concat(pageResult.items);
+      }
+
+      const supportedOrder: PortalCode[] = ['POS', 'SCHOOL_ERP', 'ERP', 'MEDICAL'];
+      const portalSet = new Set<PortalCode>();
+      for (const instance of allItems) {
+        const code = normalizePortalCode(instance.solution.code);
+        if (code) portalSet.add(code);
+      }
+
+      setPortalOptions(supportedOrder.filter((code) => portalSet.has(code)));
+    } catch (fetchError: unknown) {
+      setPortalOptions([]);
+      toast.error(`Gagal memuat portal tenant: ${getApiErrorMessage(fetchError)}`);
+    } finally {
+      setLoadingPortals(false);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchTenants();
   }, []);
@@ -153,6 +211,29 @@ export default function UsersPage() {
     void fetchBranches(form.tenantId);
   }, [fetchBranches, form.tenantId, isCashierRole]);
 
+  useEffect(() => {
+    if (!form.tenantId) {
+      setPortalOptions([]);
+      setForm((prev) => ({ ...prev, allowedSolutions: [] }));
+      return;
+    }
+
+    void fetchTenantPortals(form.tenantId);
+  }, [fetchTenantPortals, form.tenantId]);
+
+  useEffect(() => {
+    setForm((prev) => {
+      const availableSet = new Set(portalOptions);
+      const filtered = prev.allowedSolutions.filter((code) => availableSet.has(code));
+      if (filtered.length > 0 || portalOptions.length !== 1) {
+        if (filtered.length === prev.allowedSolutions.length) return prev;
+        return { ...prev, allowedSolutions: filtered };
+      }
+
+      return { ...prev, allowedSolutions: [portalOptions[0]] };
+    });
+  }, [portalOptions]);
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
@@ -165,27 +246,53 @@ export default function UsersPage() {
       return;
     }
 
+    if (portalOptions.length > 0 && form.allowedSolutions.length === 0) {
+      setSubmitting(false);
+      setError('Pilih minimal satu akses portal.');
+      return;
+    }
+
     try {
       const normalizedEmail = form.email.trim().toLowerCase();
       const normalizedUsername = form.username
         ? form.username.toLowerCase().replace(/\s+/g, '')
         : '';
 
-      const created = await createUser({
-        tenantId: form.tenantId,
-        ...(isCashierRole ? { branchId: form.branchId } : {}),
-        email: normalizedEmail,
-        ...(normalizedUsername ? { username: normalizedUsername } : {}),
-        password: form.password,
-        name: form.name,
-        role: form.role,
-      });
+      if (editingUser) {
+        const updated = await updateUser(editingUser.id, {
+          tenantId: form.tenantId,
+          ...(isCashierRole ? { branchId: form.branchId } : {}),
+          email: normalizedEmail,
+          ...(normalizedUsername ? { username: normalizedUsername } : {}),
+          ...(form.password ? { password: form.password } : {}),
+          name: form.name,
+          role: form.role,
+          allowedSolutions: form.allowedSolutions,
+        });
 
-      setSuccessMessage(
-        `User ${created.email ?? created.username ?? '-'} berhasil dibuat pada tenant ${created.tenant.name}`,
-      );
-      setForm(initialForm);
-      toast.success('Tenant user berhasil dibuat');
+        setSuccessMessage(`User ${updated.email ?? updated.username ?? '-'} berhasil diupdate.`);
+        setEditingUser(null);
+        setForm(initialForm);
+        toast.success('User berhasil diupdate');
+      } else {
+        const created = await createUser({
+          tenantId: form.tenantId,
+          ...(isCashierRole ? { branchId: form.branchId } : {}),
+          email: normalizedEmail,
+          ...(normalizedUsername ? { username: normalizedUsername } : {}),
+          password: form.password,
+          name: form.name,
+          role: form.role,
+          allowedSolutions: form.allowedSolutions,
+        });
+
+        setSuccessMessage(
+          `User ${created.email ?? created.username ?? '-'} berhasil dibuat pada tenant ${created.tenant.name}`,
+        );
+        setForm(initialForm);
+        toast.success('Tenant user berhasil dibuat');
+      }
+
       setPage(1);
       await fetchUsers();
     } catch (submitError: unknown) {
@@ -212,6 +319,7 @@ export default function UsersPage() {
           ...prev,
           tenantId: value,
           branchId: '',
+          allowedSolutions: [],
         };
       }
 
@@ -225,6 +333,34 @@ export default function UsersPage() {
       }
 
       return { ...prev, [field]: value as UserFormState[typeof field] };
+    });
+  };
+
+  const toggleAllowedSolution = (solution: PortalCode) => {
+    setForm((prev) => {
+      const exists = prev.allowedSolutions.includes(solution);
+      return {
+        ...prev,
+        allowedSolutions: exists
+          ? prev.allowedSolutions.filter((item) => item !== solution)
+          : [...prev.allowedSolutions, solution],
+      };
+    });
+  };
+
+  const openEditForm = (user: UserListItem) => {
+    setEditingUser(user);
+    setError(null);
+    setSuccessMessage(null);
+    setForm({
+      tenantId: user.tenantId,
+      branchId: user.branchId ?? '',
+      email: user.email ?? '',
+      username: user.username ?? '',
+      password: '',
+      name: user.name,
+      role: user.role === 'CRM_STAFF' ? 'CRM_STAFF' : 'TENANT_ADMIN',
+      allowedSolutions: normalizeAllowedPortals(user.allowedSolutions),
     });
   };
 
@@ -297,6 +433,12 @@ export default function UsersPage() {
         </p>
       </div>
 
+      {editingUser ? (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-primary">
+          Sedang edit user: <strong>{editingUser.name}</strong>
+        </div>
+      ) : null}
+
       <form
         onSubmit={onSubmit}
         className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
@@ -358,14 +500,16 @@ export default function UsersPage() {
           </label>
 
           <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">Password *</span>
+            <span className="text-sm font-medium text-slate-700">
+              Password {editingUser ? '(opsional)' : '*'}
+            </span>
             <input
               type="password"
-              required
-              minLength={8}
+              required={!editingUser}
+              minLength={editingUser ? 0 : 8}
               value={form.password}
               onChange={(event) => updateField('password', event.target.value)}
-              placeholder="Minimal 8 karakter"
+              placeholder={editingUser ? 'Kosongkan jika tidak diubah' : 'Minimal 8 karakter'}
               autoComplete="new-password"
               className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
             />
@@ -405,6 +549,31 @@ export default function UsersPage() {
               </select>
             </label>
           ) : null}
+
+          <div className="space-y-2 md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Akses Portal</span>
+            {loadingPortals ? (
+              <p className="text-sm text-slate-500">Memuat portal tenant...</p>
+            ) : portalOptions.length === 0 ? (
+              <p className="text-sm text-slate-500">Tenant ini belum memiliki subscription portal aktif.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {portalOptions.map((portal) => (
+                  <label
+                    key={portal}
+                    className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.allowedSolutions.includes(portal)}
+                      onChange={() => toggleAllowedSolution(portal)}
+                    />
+                    <span className="text-sm font-medium text-dark">{portal}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -416,8 +585,21 @@ export default function UsersPage() {
             disabled={submitting}
             className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting ? 'Menyimpan...' : 'Create Tenant User'}
+            {submitting ? 'Menyimpan...' : editingUser ? 'Update User' : 'Create Tenant User'}
           </button>
+          {editingUser ? (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingUser(null);
+                setForm(initialForm);
+                setError(null);
+              }}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            >
+              Cancel Edit
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -478,7 +660,7 @@ export default function UsersPage() {
           <TableSkeleton rows={5} columns={7} />
         ) : (
           <DataTable
-            headers={['Name', 'Username', 'Email', 'Role', 'Tenant Name', 'Created At', 'Actions']}
+            headers={['Name', 'Username', 'Email', 'Role', 'Portals', 'Tenant Name', 'Created At', 'Actions']}
             hasData={items.length > 0}
             emptyMessage={tableError ?? 'Belum ada user.'}
           >
@@ -492,6 +674,22 @@ export default function UsersPage() {
                     {user.role}
                   </span>
                 </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {normalizeAllowedPortals(user.allowedSolutions).length > 0 ? (
+                      normalizeAllowedPortals(user.allowedSolutions).map((portal) => (
+                        <span
+                          key={`${user.id}-${portal}`}
+                          className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700"
+                        >
+                          {portal}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500">-</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-slate-700">{user.tenant?.name ?? '-'}</td>
                 <td className="px-4 py-3 text-slate-500">
                   {new Date(user.createdAt).toLocaleDateString()}
@@ -499,6 +697,14 @@ export default function UsersPage() {
                 <td className="px-4 py-3">
                   {user.role !== 'SUPER_ADMIN' ? (
                     <div className="flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openEditForm(user)}
+                        title="Edit user"
+                        className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                      >
+                        Edit
+                      </button>
                       <button
                         type="button"
                         onClick={() => openResetModal(user)}

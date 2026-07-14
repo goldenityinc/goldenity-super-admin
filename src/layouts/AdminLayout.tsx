@@ -33,10 +33,10 @@ const menuSections: SidebarSection[] = [
     items: [
       { to: '/', label: 'Dashboard', icon: Home },
       { to: '/tenants', label: 'Tenants', icon: Building2 },
+      { to: '/subscriptions', label: 'Subscriptions', icon: Link2 },
       { to: '/users', label: 'Users', icon: Users },
       { to: '/roles', label: 'Roles', icon: Users },
       { to: '/solutions', label: 'Solutions', icon: Layers3 },
-      { to: '/subscriptions', label: 'Subscriptions', icon: Link2 },
       { to: '/settings', label: 'Settings', icon: Settings },
       { to: '/downloads', label: 'Downloads', icon: Download },
     ],
