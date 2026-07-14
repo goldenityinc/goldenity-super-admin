@@ -41,7 +41,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 type FormState = {
   tenantId: string;
   solutionId: string;
-  solutionCode: '' | 'POS' | 'SCHOOL_ERP';
+  solutionCode: '' | SolutionCode;
   tier: SubscriptionTier;
   modules: SubscriptionModuleKey[];
   activeModules: SchoolErpModule[];
@@ -51,10 +51,19 @@ type FormState = {
 };
 
 type SchoolErpModule = 'ACADEMICS' | 'FINANCE';
+type SolutionCode = 'POS' | 'ERP' | 'MEDICAL' | 'SCHOOL_ERP';
 
 const ERP_SOLUTION_CODE = 'ERP' as const;
 const POS_SOLUTION_CODE = 'POS' as const;
+const MEDICAL_SOLUTION_CODE = 'MEDICAL' as const;
+const CLINIC_SOLUTION_CODE = 'CLINIC' as const;
 const SCHOOL_ERP_SOLUTION_CODE = 'SCHOOL_ERP' as const;
+const SOLUTION_OPTIONS: { code: SolutionCode; backendCodes: string[] }[] = [
+  { code: POS_SOLUTION_CODE, backendCodes: [POS_SOLUTION_CODE] },
+  { code: ERP_SOLUTION_CODE, backendCodes: [ERP_SOLUTION_CODE] },
+  { code: MEDICAL_SOLUTION_CODE, backendCodes: [MEDICAL_SOLUTION_CODE, CLINIC_SOLUTION_CODE] },
+  { code: SCHOOL_ERP_SOLUTION_CODE, backendCodes: [SCHOOL_ERP_SOLUTION_CODE] },
+];
 const SCHOOL_ERP_MODULE_OPTIONS: SchoolErpModule[] = ['ACADEMICS', 'FINANCE'];
 const ERP_WEB_ORIGIN = (import.meta.env.VITE_ERP_WEB_ORIGIN as string | undefined) ?? '';
 const POS_WEB_ORIGIN = (import.meta.env.VITE_POS_WEB_ORIGIN as string | undefined) ?? '';
@@ -205,6 +214,24 @@ function getTierTemplateModules(tier: SubscriptionTier): SubscriptionModuleKey[]
   return sanitizeSubscriptionModules(TIER_DEFAULT_MODULES[tier]);
 }
 
+function normalizeSolutionCode(code: string | undefined): '' | SolutionCode {
+  if (!code) return '';
+
+  if (code === POS_SOLUTION_CODE) return POS_SOLUTION_CODE;
+  if (code === ERP_SOLUTION_CODE) return ERP_SOLUTION_CODE;
+  if (code === SCHOOL_ERP_SOLUTION_CODE) return SCHOOL_ERP_SOLUTION_CODE;
+  if (code === MEDICAL_SOLUTION_CODE || code === CLINIC_SOLUTION_CODE) return MEDICAL_SOLUTION_CODE;
+
+  return '';
+}
+
+function findSolutionByCode(solutions: Solution[], code: SolutionCode | ''): Solution | undefined {
+  if (!code) return undefined;
+  const option = SOLUTION_OPTIONS.find((item) => item.code === code);
+  if (!option) return undefined;
+  return solutions.find((solution) => option.backendCodes.includes(solution.code));
+}
+
 export default function AppInstancesPage() {
   const [items, setItems] = useState<AppInstance[]>([]);
   const [loadingTable, setLoadingTable] = useState(false);
@@ -320,9 +347,7 @@ export default function AppInstancesPage() {
 
   const openEditModal = (item: AppInstance) => {
     setEditingItem(item);
-    const solutionCode = item.solution.code === POS_SOLUTION_CODE || item.solution.code === SCHOOL_ERP_SOLUTION_CODE
-      ? item.solution.code
-      : '';
+    const solutionCode = normalizeSolutionCode(item.solution.code);
     setForm({
       tenantId: item.tenantId,
       solutionId: item.solutionId,
@@ -359,8 +384,8 @@ export default function AppInstancesPage() {
     });
   };
 
-  const onChangeSolutionCode = (solutionCode: '' | 'POS' | 'SCHOOL_ERP') => {
-    const matchedSolution = solutions.find((solution) => solution.code === solutionCode);
+  const onChangeSolutionCode = (solutionCode: '' | SolutionCode) => {
+    const matchedSolution = findSolutionByCode(solutions, solutionCode);
     setForm((prev) => ({
       ...prev,
       solutionCode,
@@ -400,14 +425,11 @@ export default function AppInstancesPage() {
     [moduleCatalog]
   );
 
-  const selectedSolution = solutions.find((s) => s.id === form.solutionId);
-  const isErpSolution = selectedSolution?.code === ERP_SOLUTION_CODE;
-  const isPosSolution = selectedSolution?.code === POS_SOLUTION_CODE;
-  const isSchoolErpSolution = selectedSolution?.code === SCHOOL_ERP_SOLUTION_CODE;
-  const hasPosSolution = solutions.some((solution) => solution.code === POS_SOLUTION_CODE);
-  const hasSchoolErpSolution = solutions.some(
-    (solution) => solution.code === SCHOOL_ERP_SOLUTION_CODE
-  );
+  const selectedSolution =
+    solutions.find((s) => s.id === form.solutionId) ?? findSolutionByCode(solutions, form.solutionCode);
+  const isErpSolution = form.solutionCode === ERP_SOLUTION_CODE;
+  const isPosSolution = form.solutionCode === POS_SOLUTION_CODE;
+  const isSchoolErpSolution = form.solutionCode === SCHOOL_ERP_SOLUTION_CODE;
   const canUseCustomTier = Boolean(isErpSolution);
   const needsErpFeaturePicker = Boolean(isErpSolution && form.tier === 'Custom');
 
@@ -616,7 +638,7 @@ export default function AppInstancesPage() {
     event.preventDefault();
 
     if (!form.solutionId) {
-      toast.error('Solution belum tersedia. Pastikan solusi POS / SCHOOL_ERP sudah aktif.');
+      toast.error('Solution belum tersedia. Pastikan solusi POS / ERP / MEDICAL / SCHOOL_ERP sudah aktif.');
       return;
     }
 
@@ -1033,18 +1055,17 @@ export default function AppInstancesPage() {
                 required
                 value={form.solutionCode}
                 onChange={(event) =>
-                  onChangeSolutionCode(event.target.value as '' | 'POS' | 'SCHOOL_ERP')
+                  onChangeSolutionCode(event.target.value as '' | SolutionCode)
                 }
                 disabled={loadingRefs || Boolean(editingItem)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
               >
                 <option value="">-- Select Solution --</option>
-                <option value="POS" disabled={!hasPosSolution}>
-                  POS{hasPosSolution ? '' : ' (not available)'}
-                </option>
-                <option value="SCHOOL_ERP" disabled={!hasSchoolErpSolution}>
-                  SCHOOL_ERP{hasSchoolErpSolution ? '' : ' (not available)'}
-                </option>
+                {SOLUTION_OPTIONS.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.code}
+                  </option>
+                ))}
               </select>
             </label>
 
@@ -1161,7 +1182,7 @@ export default function AppInstancesPage() {
                 ))}
               </div>
             </div>
-          ) : form.solutionId ? (
+          ) : form.solutionCode ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-semibold text-dark">Modules</p>
               <p className="text-sm text-slate-600">

@@ -43,7 +43,7 @@ export type AppInstance = {
 export type CreateAppInstancePayload = {
   tenantId: string;
   solutionId: string;
-  solution?: 'POS' | 'SCHOOL_ERP' | string;
+  solution?: 'POS' | 'ERP' | 'MEDICAL' | 'SCHOOL_ERP' | string;
   tier: SubscriptionTier;
   moduleKeys?: SubscriptionModuleKey[];
   activeModules?: string[];
@@ -56,7 +56,7 @@ export type CreateAppInstancePayload = {
 };
 
 export type UpdateAppInstancePayload = {
-  solution?: 'POS' | 'SCHOOL_ERP' | string;
+  solution?: 'POS' | 'ERP' | 'MEDICAL' | 'SCHOOL_ERP' | string;
   tier?: SubscriptionTier;
   moduleKeys?: SubscriptionModuleKey[];
   activeModules?: string[];
