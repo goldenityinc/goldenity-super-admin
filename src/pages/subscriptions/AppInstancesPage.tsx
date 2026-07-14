@@ -41,15 +41,21 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 type FormState = {
   tenantId: string;
   solutionId: string;
+  solutionCode: '' | 'POS' | 'SCHOOL_ERP';
   tier: SubscriptionTier;
   modules: SubscriptionModuleKey[];
+  activeModules: SchoolErpModule[];
   syncMode: SyncMode;
   status: AppInstanceStatus;
   endDate: string;
 };
 
+type SchoolErpModule = 'ACADEMICS' | 'FINANCE';
+
 const ERP_SOLUTION_CODE = 'ERP' as const;
 const POS_SOLUTION_CODE = 'POS' as const;
+const SCHOOL_ERP_SOLUTION_CODE = 'SCHOOL_ERP' as const;
+const SCHOOL_ERP_MODULE_OPTIONS: SchoolErpModule[] = ['ACADEMICS', 'FINANCE'];
 const ERP_WEB_ORIGIN = (import.meta.env.VITE_ERP_WEB_ORIGIN as string | undefined) ?? '';
 const POS_WEB_ORIGIN = (import.meta.env.VITE_POS_WEB_ORIGIN as string | undefined) ?? '';
 const CLINIC_WEB_ORIGIN = (import.meta.env.VITE_CLINIC_WEB_ORIGIN as string | undefined) ?? '';
@@ -95,8 +101,10 @@ function isValidErpOrgIdCandidate(value: string): boolean {
 const initialForm: FormState = {
   tenantId: '',
   solutionId: '',
+  solutionCode: '',
   tier: 'Standard',
   modules: [],
+  activeModules: [],
   syncMode: 'CLOUD_FIRST',
   status: 'ACTIVE',
   endDate: '',
@@ -145,6 +153,36 @@ function formatRemaining(value: string | null | undefined): string {
     return `${months} bulan`;
   }
   return `${days} hari`;
+}
+
+function normalizeSchoolErpModules(value: unknown): SchoolErpModule[] {
+  const toModule = (item: unknown): SchoolErpModule | null => {
+    if (typeof item !== 'string') return null;
+    const normalized = item.trim().toUpperCase();
+    if (normalized === 'ACADEMICS' || normalized === 'FINANCE') {
+      return normalized;
+    }
+    return null;
+  };
+
+  const fromArray = Array.isArray(value) ? value : [];
+  const parsed = fromArray
+    .map((item) => toModule(item))
+    .filter((item): item is SchoolErpModule => item !== null);
+
+  if (parsed.length > 0) {
+    return [...new Set(parsed)];
+  }
+
+  if (typeof value === 'string') {
+    const fromString = value
+      .split(',')
+      .map((item) => toModule(item))
+      .filter((item): item is SchoolErpModule => item !== null);
+    return [...new Set(fromString)];
+  }
+
+  return [];
 }
 
 function getSyncModeBadgeClass(mode: SyncMode): string {
@@ -282,13 +320,18 @@ export default function AppInstancesPage() {
 
   const openEditModal = (item: AppInstance) => {
     setEditingItem(item);
+    const solutionCode = item.solution.code === POS_SOLUTION_CODE || item.solution.code === SCHOOL_ERP_SOLUTION_CODE
+      ? item.solution.code
+      : '';
     setForm({
       tenantId: item.tenantId,
       solutionId: item.solutionId,
+      solutionCode,
       tier: item.tier,
       modules: sanitizeSubscriptionModules(
         Array.isArray(item.moduleKeys) ? item.moduleKeys : mapLegacyAddonsToModules(item.addons)
       ),
+      activeModules: normalizeSchoolErpModules(item.activeModules),
       syncMode: item.syncMode ?? 'CLOUD_FIRST',
       status: item.status,
       endDate: toDateInputValue(item.endDate ?? null),
@@ -309,10 +352,23 @@ export default function AppInstancesPage() {
       }
       if (field === 'solutionId' && value !== prev.solutionId) {
         next.modules = [];
+        next.activeModules = [];
         setErpSelectedFeatures([]);
       }
       return next;
     });
+  };
+
+  const onChangeSolutionCode = (solutionCode: '' | 'POS' | 'SCHOOL_ERP') => {
+    const matchedSolution = solutions.find((solution) => solution.code === solutionCode);
+    setForm((prev) => ({
+      ...prev,
+      solutionCode,
+      solutionId: matchedSolution?.id ?? '',
+      modules: [],
+      activeModules: [],
+    }));
+    setErpSelectedFeatures([]);
   };
 
   const toggleModule = (moduleKey: SubscriptionModuleKey) => {
@@ -327,6 +383,18 @@ export default function AppInstancesPage() {
     });
   };
 
+  const toggleSchoolErpModule = (moduleKey: SchoolErpModule) => {
+    setForm((prev) => {
+      const hasModule = prev.activeModules.includes(moduleKey);
+      return {
+        ...prev,
+        activeModules: hasModule
+          ? prev.activeModules.filter((item) => item !== moduleKey)
+          : [...prev.activeModules, moduleKey],
+      };
+    });
+  };
+
   const normalizedModuleCatalog = useMemo(
     () => mergeSubscriptionModuleCatalog(moduleCatalog),
     [moduleCatalog]
@@ -335,6 +403,11 @@ export default function AppInstancesPage() {
   const selectedSolution = solutions.find((s) => s.id === form.solutionId);
   const isErpSolution = selectedSolution?.code === ERP_SOLUTION_CODE;
   const isPosSolution = selectedSolution?.code === POS_SOLUTION_CODE;
+  const isSchoolErpSolution = selectedSolution?.code === SCHOOL_ERP_SOLUTION_CODE;
+  const hasPosSolution = solutions.some((solution) => solution.code === POS_SOLUTION_CODE);
+  const hasSchoolErpSolution = solutions.some(
+    (solution) => solution.code === SCHOOL_ERP_SOLUTION_CODE
+  );
   const canUseCustomTier = Boolean(isErpSolution);
   const needsErpFeaturePicker = Boolean(isErpSolution && form.tier === 'Custom');
 
@@ -479,6 +552,26 @@ export default function AppInstancesPage() {
     return `${base} border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200/60`;
   };
 
+  const getSolutionBadgeClasses = (solutionCode: string): string => {
+    if (solutionCode === POS_SOLUTION_CODE) {
+      return 'bg-blue-100 text-blue-700';
+    }
+
+    if (solutionCode === SCHOOL_ERP_SOLUTION_CODE) {
+      return 'bg-emerald-100 text-emerald-700';
+    }
+
+    return 'bg-slate-100 text-slate-700';
+  };
+
+  const getInstanceActiveModules = (instance: AppInstance): string[] => {
+    if (instance.solution.code !== SCHOOL_ERP_SOLUTION_CODE) {
+      return [];
+    }
+
+    return normalizeSchoolErpModules(instance.activeModules);
+  };
+
   const openSolutionApp = (item: AppInstance) => {
     const code = item.solution.code;
     const configuredOrigin =
@@ -521,6 +614,12 @@ export default function AppInstancesPage() {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!form.solutionId) {
+      toast.error('Solution belum tersedia. Pastikan solusi POS / SCHOOL_ERP sudah aktif.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -536,10 +635,13 @@ export default function AppInstancesPage() {
       }
 
       if (editingItem) {
-        const moduleKeys = sanitizeSubscriptionModules(form.modules);
+        const moduleKeys = isPosSolution ? sanitizeSubscriptionModules(form.modules) : [];
+        const activeModules = isSchoolErpSolution ? form.activeModules : [];
         await updateAppInstance(editingItem.id, {
+          solution: form.solutionCode,
           tier: form.tier,
           moduleKeys,
+          activeModules,
           addons: mapModulesToLegacyAddons(moduleKeys),
           syncMode: form.syncMode,
           status: form.status,
@@ -551,12 +653,15 @@ export default function AppInstancesPage() {
         }
         toast.success('Subscription berhasil diupdate');
       } else {
-        const moduleKeys = sanitizeSubscriptionModules(form.modules);
+        const moduleKeys = isPosSolution ? sanitizeSubscriptionModules(form.modules) : [];
+        const activeModules = isSchoolErpSolution ? form.activeModules : [];
         const created = await createAppInstance({
           tenantId: form.tenantId,
           solutionId: form.solutionId,
+          solution: form.solutionCode,
           tier: form.tier,
           moduleKeys,
+          activeModules,
           addons: mapModulesToLegacyAddons(moduleKeys),
           syncMode: form.syncMode,
           status: form.status,
@@ -786,7 +891,10 @@ export default function AppInstancesPage() {
                   {row.instances.map((instance) => (
                     <span
                       key={instance.id}
-                      className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+                      className={[
+                        'rounded-full px-2 py-0.5 text-xs font-semibold',
+                        getSolutionBadgeClasses(instance.solution.code),
+                      ].join(' ')}
                       title={instance.solution.name}
                     >
                       {instance.solution.code}
@@ -811,6 +919,23 @@ export default function AppInstancesPage() {
                           Sync: {SYNC_MODE_LABELS[instance.syncMode ?? 'CLOUD_FIRST']}
                         </span>
                       </div>
+                      {instance.solution.code === SCHOOL_ERP_SOLUTION_CODE ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-xs text-slate-500">Modules:</span>
+                          {getInstanceActiveModules(instance).length > 0 ? (
+                            getInstanceActiveModules(instance).map((module) => (
+                              <span
+                                key={`${instance.id}-${module}`}
+                                className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+                              >
+                                {module}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-slate-500">-</span>
+                          )}
+                        </div>
+                      ) : null}
                       <div className="text-xs text-slate-500">
                         Sisa: {formatRemaining(instance.endDate ?? null)} • End:{' '}
                         {formatEndDate(instance.endDate ?? null)}
@@ -906,17 +1031,20 @@ export default function AppInstancesPage() {
               <span className="text-sm font-medium text-slate-700">Solution *</span>
               <select
                 required
-                value={form.solutionId}
-                onChange={(event) => onChangeField('solutionId', event.target.value)}
+                value={form.solutionCode}
+                onChange={(event) =>
+                  onChangeSolutionCode(event.target.value as '' | 'POS' | 'SCHOOL_ERP')
+                }
                 disabled={loadingRefs || Boolean(editingItem)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
               >
                 <option value="">-- Select Solution --</option>
-                {solutions.map((solution) => (
-                  <option key={solution.id} value={solution.id}>
-                    {solution.name} ({solution.code})
-                  </option>
-                ))}
+                <option value="POS" disabled={!hasPosSolution}>
+                  POS{hasPosSolution ? '' : ' (not available)'}
+                </option>
+                <option value="SCHOOL_ERP" disabled={!hasSchoolErpSolution}>
+                  SCHOOL_ERP{hasSchoolErpSolution ? '' : ' (not available)'}
+                </option>
               </select>
             </label>
 
@@ -1012,6 +1140,26 @@ export default function AppInstancesPage() {
                   ))}
                 </div>
               )}
+            </div>
+          ) : isSchoolErpSolution ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-dark">Active Modules (SCHOOL_ERP)</p>
+              <p className="text-xs text-slate-600">Pilih modul SCHOOL_ERP yang diaktifkan untuk tenant ini.</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {SCHOOL_ERP_MODULE_OPTIONS.map((moduleOption) => (
+                  <label
+                    key={moduleOption}
+                    className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white p-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={form.activeModules.includes(moduleOption)}
+                      onChange={() => toggleSchoolErpModule(moduleOption)}
+                    />
+                    <span className="text-sm font-medium text-dark">{moduleOption}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           ) : form.solutionId ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">

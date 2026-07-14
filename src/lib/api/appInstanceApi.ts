@@ -20,6 +20,7 @@ export type AppInstance = {
   tier: SubscriptionTier;
   addons: string[];
   moduleKeys?: string[];
+  activeModules?: string[] | string | null;
   syncMode: SyncMode;
   status: AppInstanceStatus;
   dbConnectionString?: string | null;
@@ -42,8 +43,10 @@ export type AppInstance = {
 export type CreateAppInstancePayload = {
   tenantId: string;
   solutionId: string;
+  solution?: 'POS' | 'SCHOOL_ERP' | string;
   tier: SubscriptionTier;
   moduleKeys?: SubscriptionModuleKey[];
+  activeModules?: string[];
   addons?: string[];
   syncMode?: SyncMode;
   status?: AppInstanceStatus;
@@ -53,8 +56,10 @@ export type CreateAppInstancePayload = {
 };
 
 export type UpdateAppInstancePayload = {
+  solution?: 'POS' | 'SCHOOL_ERP' | string;
   tier?: SubscriptionTier;
   moduleKeys?: SubscriptionModuleKey[];
+  activeModules?: string[];
   addons?: string[];
   syncMode?: SyncMode;
   status?: AppInstanceStatus;
