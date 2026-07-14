@@ -232,6 +232,22 @@ function findSolutionByCode(solutions: Solution[], code: SolutionCode | ''): Sol
   return solutions.find((solution) => option.backendCodes.includes(solution.code));
 }
 
+function buildFormStateFromInstance(instance: AppInstance, solutionCode: SolutionCode): FormState {
+  return {
+    tenantId: instance.tenantId,
+    solutionId: instance.solutionId,
+    solutionCode,
+    tier: instance.tier,
+    modules: sanitizeSubscriptionModules(
+      Array.isArray(instance.moduleKeys) ? instance.moduleKeys : mapLegacyAddonsToModules(instance.addons)
+    ),
+    activeModules: normalizeSchoolErpModules(instance.activeModules),
+    syncMode: instance.syncMode ?? 'CLOUD_FIRST',
+    status: instance.status,
+    endDate: toDateInputValue(instance.endDate ?? null),
+  };
+}
+
 export default function AppInstancesPage() {
   const [items, setItems] = useState<AppInstance[]>([]);
   const [loadingTable, setLoadingTable] = useState(false);
@@ -348,19 +364,11 @@ export default function AppInstancesPage() {
   const openEditModal = (item: AppInstance) => {
     setEditingItem(item);
     const solutionCode = normalizeSolutionCode(item.solution.code);
-    setForm({
-      tenantId: item.tenantId,
-      solutionId: item.solutionId,
-      solutionCode,
-      tier: item.tier,
-      modules: sanitizeSubscriptionModules(
-        Array.isArray(item.moduleKeys) ? item.moduleKeys : mapLegacyAddonsToModules(item.addons)
-      ),
-      activeModules: normalizeSchoolErpModules(item.activeModules),
-      syncMode: item.syncMode ?? 'CLOUD_FIRST',
-      status: item.status,
-      endDate: toDateInputValue(item.endDate ?? null),
-    });
+    if (!solutionCode) {
+      setForm(initialForm);
+    } else {
+      setForm(buildFormStateFromInstance(item, solutionCode));
+    }
 
     // Preload happens via effect when ERP + Custom.
     setModuleCatalog([]);
@@ -386,6 +394,36 @@ export default function AppInstancesPage() {
 
   const onChangeSolutionCode = (solutionCode: '' | SolutionCode) => {
     const matchedSolution = findSolutionByCode(solutions, solutionCode);
+
+    if (!solutionCode) {
+      setForm((prev) => ({
+        ...prev,
+        solutionCode,
+        solutionId: '',
+        modules: [],
+        activeModules: [],
+      }));
+      setErpSelectedFeatures([]);
+      return;
+    }
+
+    if (editingItem) {
+      const targetInstance = items.find(
+        (instance) =>
+          instance.tenantId === editingItem.tenantId && normalizeSolutionCode(instance.solution.code) === solutionCode
+      );
+
+      if (targetInstance) {
+        setEditingItem(targetInstance);
+        setForm(buildFormStateFromInstance(targetInstance, solutionCode));
+        setErpSelectedFeatures([]);
+        return;
+      }
+
+      toast.warning(`Subscription ${solutionCode} untuk tenant ini belum tersedia.`);
+      return;
+    }
+
     setForm((prev) => ({
       ...prev,
       solutionCode,
@@ -613,15 +651,12 @@ export default function AppInstancesPage() {
     }
 
     if (!origin) {
-      toast.error(
-        code === 'ERP'
-          ? 'ERP Web Origin belum dikonfigurasi. Set VITE_ERP_WEB_ORIGIN di Vercel.'
-          : code === 'POS'
-            ? 'POS Web Origin belum dikonfigurasi. Set VITE_POS_WEB_ORIGIN di Vercel.'
-            : code === 'CLINIC'
-              ? 'CLINIC Web Origin belum dikonfigurasi. Set VITE_CLINIC_WEB_ORIGIN di Vercel.'
-              : 'Web Origin belum dikonfigurasi untuk subscription ini.',
-      );
+      if (item.appUrl) {
+        window.open(item.appUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      toast.message('Link aplikasi belum tersedia untuk subscription ini.');
       return;
     }
 
@@ -1055,7 +1090,7 @@ export default function AppInstancesPage() {
                 onChange={(event) =>
                   onChangeSolutionCode(event.target.value as '' | SolutionCode)
                 }
-                disabled={loadingRefs || Boolean(editingItem)}
+                disabled={loadingRefs}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
               >
                 <option value="">-- Select Solution --</option>
