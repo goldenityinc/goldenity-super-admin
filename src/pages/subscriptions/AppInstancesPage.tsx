@@ -425,8 +425,6 @@ export default function AppInstancesPage() {
     [moduleCatalog]
   );
 
-  const selectedSolution =
-    solutions.find((s) => s.id === form.solutionId) ?? findSolutionByCode(solutions, form.solutionCode);
   const isErpSolution = form.solutionCode === ERP_SOLUTION_CODE;
   const isPosSolution = form.solutionCode === POS_SOLUTION_CODE;
   const isSchoolErpSolution = form.solutionCode === SCHOOL_ERP_SOLUTION_CODE;
