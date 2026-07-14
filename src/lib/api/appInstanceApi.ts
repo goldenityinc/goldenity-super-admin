@@ -20,6 +20,7 @@ export type AppInstance = {
   tier: SubscriptionTier;
   addons: string[];
   moduleKeys?: string[];
+  modules?: string[] | string | null;
   activeModules?: string[] | string | null;
   syncMode: SyncMode;
   status: AppInstanceStatus;

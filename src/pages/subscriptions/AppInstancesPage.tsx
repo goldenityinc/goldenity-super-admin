@@ -238,6 +238,10 @@ function findSolutionByCode(solutions: Solution[], code: SolutionCode | ''): Sol
   return solutions.find((solution) => option.backendCodes.includes(solution.code));
 }
 
+function getSchoolErpModulesFromInstance(instance: AppInstance): SchoolErpModule[] {
+  return normalizeSchoolErpModules(instance.activeModules ?? instance.modules ?? instance.moduleKeys);
+}
+
 function buildFormStateFromInstance(instance: AppInstance, solutionCode: SolutionCode): FormState {
   return {
     tenantId: instance.tenantId,
@@ -247,7 +251,7 @@ function buildFormStateFromInstance(instance: AppInstance, solutionCode: Solutio
     modules: sanitizeSubscriptionModules(
       Array.isArray(instance.moduleKeys) ? instance.moduleKeys : mapLegacyAddonsToModules(instance.addons)
     ),
-    activeModules: normalizeSchoolErpModules(instance.activeModules),
+    activeModules: getSchoolErpModulesFromInstance(instance),
     syncMode: instance.syncMode ?? 'CLOUD_FIRST',
     status: instance.status,
     endDate: toDateInputValue(instance.endDate ?? null),
@@ -645,7 +649,7 @@ export default function AppInstancesPage() {
       return [];
     }
 
-    return normalizeSchoolErpModules(instance.activeModules);
+      return getSchoolErpModulesFromInstance(instance);
   };
 
   const openSolutionApp = (item: AppInstance) => {

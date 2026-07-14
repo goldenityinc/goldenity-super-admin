@@ -54,7 +54,7 @@ export async function createUser(payload: CreateUserPayload): Promise<UserListIt
 }
 
 export async function updateUser(userId: string, payload: UpdateUserPayload): Promise<UserListItem> {
-  const response = await httpClient.patch(`/users/${userId}`, payload);
+  const response = await httpClient.put(`/users/${userId}`, payload);
   return response.data.data as UserListItem;
 }
 
