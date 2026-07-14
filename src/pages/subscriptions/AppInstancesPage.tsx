@@ -712,7 +712,11 @@ export default function AppInstancesPage() {
       }
 
       if (editingItem) {
-        const moduleKeys = isPosSolution ? sanitizeSubscriptionModules(form.modules) : [];
+        const moduleKeys = isPosSolution
+          ? sanitizeSubscriptionModules(form.modules)
+          : isSchoolErpSolution
+            ? [...form.activeModules]
+            : [];
         const schoolModules = isSchoolErpSolution ? [...form.activeModules] : [];
         await updateAppInstance(editingItem.id, {
           solution: form.solutionCode,
@@ -731,7 +735,11 @@ export default function AppInstancesPage() {
         }
         toast.success('Subscription berhasil diupdate');
       } else {
-        const moduleKeys = isPosSolution ? sanitizeSubscriptionModules(form.modules) : [];
+        const moduleKeys = isPosSolution
+          ? sanitizeSubscriptionModules(form.modules)
+          : isSchoolErpSolution
+            ? [...form.activeModules]
+            : [];
         const schoolModules = isSchoolErpSolution ? [...form.activeModules] : [];
         const created = await createAppInstance({
           tenantId: form.tenantId,
