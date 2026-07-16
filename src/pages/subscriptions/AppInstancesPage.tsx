@@ -71,6 +71,14 @@ const EDIT_TAB_ORDER: SolutionCode[] = [
   MEDICAL_SOLUTION_CODE,
 ];
 const SCHOOL_ERP_MODULE_OPTIONS: SchoolErpModule[] = ['ACADEMICS', 'FINANCE'];
+const POS_EXTRA_MODULE_CATALOG: AppInstanceModuleCatalogItem[] = [
+  {
+    key: 'module_school_erp',
+    name: 'School ERP',
+    description: 'Modul inti untuk sekolah: akademik, murid, keuangan, dan rombel.',
+    status: 'ACTIVE',
+  },
+];
 const ERP_WEB_ORIGIN = (import.meta.env.VITE_ERP_WEB_ORIGIN as string | undefined) ?? '';
 const POS_WEB_ORIGIN = (import.meta.env.VITE_POS_WEB_ORIGIN as string | undefined) ?? '';
 const CLINIC_WEB_ORIGIN = (import.meta.env.VITE_CLINIC_WEB_ORIGIN as string | undefined) ?? '';
@@ -469,8 +477,23 @@ export default function AppInstancesPage() {
   };
 
   const normalizedModuleCatalog = useMemo(
-    () => mergeSubscriptionModuleCatalog(moduleCatalog),
-    [moduleCatalog]
+    () => {
+      const merged = mergeSubscriptionModuleCatalog(moduleCatalog);
+
+      if (!isPosSolution) {
+        return merged;
+      }
+
+      const withSchoolErp = [...merged];
+      for (const extraModule of POS_EXTRA_MODULE_CATALOG) {
+        if (!withSchoolErp.some((moduleItem) => moduleItem.key === extraModule.key)) {
+          withSchoolErp.push(extraModule);
+        }
+      }
+
+      return withSchoolErp;
+    },
+    [isPosSolution, moduleCatalog]
   );
 
   const isErpSolution = form.solutionCode === ERP_SOLUTION_CODE;
