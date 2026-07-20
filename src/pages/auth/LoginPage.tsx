@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   if (!loading && user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

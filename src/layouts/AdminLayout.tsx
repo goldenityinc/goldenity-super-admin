@@ -31,19 +31,19 @@ const menuSections: SidebarSection[] = [
   {
     title: 'General',
     items: [
-      { to: '/', label: 'Dashboard', icon: Home },
-      { to: '/tenants', label: 'Tenants', icon: Building2 },
-      { to: '/subscriptions', label: 'Subscriptions', icon: Link2 },
-      { to: '/users', label: 'Users', icon: Users },
-      { to: '/roles', label: 'Roles', icon: Users },
-      { to: '/solutions', label: 'Solutions', icon: Layers3 },
-      { to: '/settings', label: 'Settings', icon: Settings },
-      { to: '/downloads', label: 'Downloads', icon: Download },
+      { to: '/dashboard', label: 'Dashboard', icon: Home },
+      { to: '/dashboard/tenants', label: 'Tenants', icon: Building2 },
+      { to: '/dashboard/subscriptions', label: 'Subscriptions', icon: Link2 },
+      { to: '/dashboard/users', label: 'Users', icon: Users },
+      { to: '/dashboard/roles', label: 'Roles', icon: Users },
+      { to: '/dashboard/solutions', label: 'Solutions', icon: Layers3 },
+      { to: '/dashboard/settings', label: 'Settings', icon: Settings },
+      { to: '/dashboard/downloads', label: 'Downloads', icon: Download },
     ],
   },
   {
     title: 'Transactions / Sales',
-    items: [{ to: '/sales/pre-orders', label: 'Pre-Order', icon: ClipboardList }],
+    items: [{ to: '/dashboard/sales/pre-orders', label: 'Pre-Order', icon: ClipboardList }],
   },
 ];
 
@@ -90,7 +90,7 @@ export default function AdminLayout() {
                     <NavLink
                       key={item.to}
                       to={item.to}
-                      end={item.to === '/'}
+                      end={item.to === '/dashboard'}
                       onClick={closeMobile}
                       className={({ isActive }) =>
                         [

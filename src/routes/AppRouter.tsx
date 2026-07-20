@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import AdminLayout from '../layouts/AdminLayout';
 import { useAuth } from '../context/useAuth';
 
+const PosLandingPage = lazy(() => import('../pages/PosLandingPage'));
+
 const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const TenantsPage = lazy(() => import('../pages/tenants/TenantsPage'));
 const UsersPage = lazy(() => import('../pages/users/UsersPage'));
@@ -53,11 +55,12 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 export default function AppRouter() {
   return (
     <Routes>
+      <Route path="/" element={withSuspense(<PosLandingPage />)} />
       <Route path="/login" element={withSuspense(<LoginPage />)} />
       <Route path="/unauthorized" element={withSuspense(<UnauthorizedPage />)} />
 
       <Route
-        path="/"
+        path="/dashboard"
         element={
           <ProtectedRoute>
             <AdminLayout />
