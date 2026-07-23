@@ -5,18 +5,15 @@ import { toast } from 'sonner';
 import {
   createAppInstance,
   deleteAppInstance,
-  getAppInstanceModuleCatalog,
   listAppInstances,
   type SyncMode,
   updateAppInstance,
   updateSubscriptionTier,
   type AppInstance,
-  type AppInstanceModuleCatalogItem,
   type AppInstanceStatus,
   type SubscriptionTier,
 } from '../../lib/api/appInstanceApi';
 import {
-  mergeSubscriptionModuleCatalog,
   mapLegacyAddonsToModules,
   mapModulesToLegacyAddons,
   sanitizeSubscriptionModules,
@@ -48,6 +45,9 @@ type FormState = {
   syncMode: SyncMode;
   status: AppInstanceStatus;
   endDate: string;
+  adminEmail: string;
+  adminPassword: string;
+  adminName: string;
 };
 
 type SchoolErpModule = 'ACADEMICS' | 'FINANCE';
@@ -71,44 +71,35 @@ const EDIT_TAB_ORDER: SolutionCode[] = [
   MEDICAL_SOLUTION_CODE,
 ];
 const SCHOOL_ERP_MODULE_OPTIONS: SchoolErpModule[] = ['ACADEMICS', 'FINANCE'];
-const POS_EXTRA_MODULE_CATALOG: AppInstanceModuleCatalogItem[] = [
-  {
-    key: 'module_school_erp',
-    name: 'School ERP',
-    description: 'Modul inti untuk sekolah: akademik, murid, keuangan, dan rombel.',
-    status: 'ACTIVE',
-  },
-];
 const ERP_WEB_ORIGIN = (import.meta.env.VITE_ERP_WEB_ORIGIN as string | undefined) ?? '';
 const POS_WEB_ORIGIN = (import.meta.env.VITE_POS_WEB_ORIGIN as string | undefined) ?? '';
 const CLINIC_WEB_ORIGIN = (import.meta.env.VITE_CLINIC_WEB_ORIGIN as string | undefined) ?? '';
+const SCHOOL_ERP_WEB_ORIGIN = (import.meta.env.VITE_SCHOOL_ERP_WEB_ORIGIN as string | undefined) ?? '';
 
 const ERP_TIER_FEATURES: Record<'Standard' | 'Professional' | 'Enterprise', string[]> = {
-  Standard: ['crm', 'sales'],
-  Professional: ['crm', 'sales', 'inventory', 'purchasing'],
+  Standard: ['sales'],
+  Professional: ['sales', 'inventory', 'warehouse'],
   Enterprise: [
-    'crm',
     'sales',
     'inventory',
+    'warehouse',
     'purchasing',
     'accounting',
-    'hr_core',
-    'hr_recruitment',
-    'hr_leave',
-    'hr_payroll',
+    'tax',
+    'audit_trail',
+    'fixed_asset',
   ],
 };
 
 const ERP_FEATURE_CATALOG_FALLBACK: ErpFeatureDefinition[] = [
-  { key: 'crm', label: 'CRM' },
   { key: 'sales', label: 'Sales' },
-  { key: 'inventory', label: 'Inventory' },
-  { key: 'purchasing', label: 'Purchasing' },
-  { key: 'accounting', label: 'Accounting' },
-  { key: 'hr_core', label: 'HR Core', description: 'Employee master, departments, positions, and org structure.' },
-  { key: 'hr_recruitment', label: 'HR Recruitment', description: 'Job vacancies, candidates, and interview workflow.' },
-  { key: 'hr_leave', label: 'HR Leave', description: 'Leave types, balances, requests, and approvals.' },
-  { key: 'hr_payroll', label: 'HR Payroll', description: 'Salary structures, overtime, and payroll runs.' },
+  { key: 'inventory', label: 'Inventory', description: 'Produk, kategori, stok, dan penyesuaian inventory.' },
+  { key: 'warehouse', label: 'Warehouse', description: 'Warehouse CRUD, transfer gudang, dan stock opname.' },
+  { key: 'purchasing', label: 'Purchasing', description: 'Purchase order, penerimaan barang, dan invoice pembelian.' },
+  { key: 'accounting', label: 'Accounting', description: 'General ledger, jurnal, dan financial report.' },
+  { key: 'tax', label: 'Tax', description: 'Pajak, VAT report, dan e-faktur.' },
+  { key: 'audit_trail', label: 'Audit Trail', description: 'Audit log dan pelacakan aktivitas perubahan data.' },
+  { key: 'fixed_asset', label: 'Fixed Asset', description: 'Manajemen fixed asset dan depresiasi.' },
 ];
 
 const SYNC_MODE_LABELS: Record<SyncMode, string> = {
@@ -131,6 +122,9 @@ const initialForm: FormState = {
   syncMode: 'CLOUD_FIRST',
   status: 'ACTIVE',
   endDate: '',
+  adminEmail: '',
+  adminPassword: '',
+  adminName: '',
 };
 
 type TenantSubscriptionRow = {
@@ -176,6 +170,17 @@ function formatRemaining(value: string | null | undefined): string {
     return `${months} bulan`;
   }
   return `${days} hari`;
+}
+
+function isSubscriptionExpired(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const end = new Date(value);
+  if (Number.isNaN(end.getTime())) return false;
+  return end.getTime() < Date.now();
+}
+
+function isNonPosClientProvisionedSolution(code: '' | SolutionCode): boolean {
+  return Boolean(code && code !== POS_SOLUTION_CODE);
 }
 
 function normalizeSchoolErpModules(value: unknown): SchoolErpModule[] {
@@ -263,6 +268,9 @@ function buildFormStateFromInstance(instance: AppInstance, solutionCode: Solutio
     syncMode: instance.syncMode ?? 'CLOUD_FIRST',
     status: instance.status,
     endDate: toDateInputValue(instance.endDate ?? null),
+    adminEmail: instance.adminEmail ?? '',
+    adminPassword: '',
+    adminName: instance.adminName ?? '',
   };
 }
 
@@ -286,8 +294,6 @@ export default function AppInstancesPage() {
   const [editingItem, setEditingItem] = useState<AppInstance | null>(null);
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
-  const [moduleCatalog, setModuleCatalog] = useState<AppInstanceModuleCatalogItem[]>([]);
-  const [moduleCatalogLoading, setModuleCatalogLoading] = useState(false);
 
   const [erpFeatureCatalog, setErpFeatureCatalog] = useState<ErpFeatureDefinition[]>([]);
   const [erpFeatureLoading, setErpFeatureLoading] = useState(false);
@@ -374,7 +380,6 @@ export default function AppInstancesPage() {
   const openCreateModal = () => {
     setEditingItem(null);
     setForm(initialForm);
-    setModuleCatalog([]);
     setErpSelectedFeatures([]);
     setIsModalOpen(true);
   };
@@ -388,8 +393,6 @@ export default function AppInstancesPage() {
       setForm(buildFormStateFromInstance(item, solutionCode));
     }
 
-    // Preload happens via effect when ERP + Custom.
-    setModuleCatalog([]);
     setErpSelectedFeatures([]);
     setIsModalOpen(true);
   };
@@ -446,22 +449,12 @@ export default function AppInstancesPage() {
       ...prev,
       solutionCode,
       solutionId: matchedSolution?.id ?? '',
-      modules: [],
+      tier: solutionCode === POS_SOLUTION_CODE ? prev.tier : 'Standard',
+      syncMode: solutionCode === POS_SOLUTION_CODE ? prev.syncMode : 'CLOUD_FIRST',
+      modules: solutionCode === POS_SOLUTION_CODE ? getTierTemplateModules(prev.tier) : [],
       activeModules: [],
     }));
-    setErpSelectedFeatures([]);
-  };
-
-  const toggleModule = (moduleKey: SubscriptionModuleKey) => {
-    setForm((prev) => {
-      const hasModule = prev.modules.includes(moduleKey);
-      return {
-        ...prev,
-        modules: sanitizeSubscriptionModules(
-          hasModule ? prev.modules.filter((item) => item !== moduleKey) : [...prev.modules, moduleKey]
-        ),
-      };
-    });
+    setErpSelectedFeatures(solutionCode === ERP_SOLUTION_CODE ? [...ERP_TIER_FEATURES.Standard] : []);
   };
 
   const toggleSchoolErpModule = (moduleKey: SchoolErpModule) => {
@@ -476,31 +469,10 @@ export default function AppInstancesPage() {
     });
   };
 
-  const normalizedModuleCatalog = useMemo(
-    () => {
-      const merged = mergeSubscriptionModuleCatalog(moduleCatalog);
-
-      if (!isPosSolution) {
-        return merged;
-      }
-
-      const withSchoolErp = [...merged];
-      for (const extraModule of POS_EXTRA_MODULE_CATALOG) {
-        if (!withSchoolErp.some((moduleItem) => moduleItem.key === extraModule.key)) {
-          withSchoolErp.push(extraModule);
-        }
-      }
-
-      return withSchoolErp;
-    },
-    [isPosSolution, moduleCatalog]
-  );
-
   const isErpSolution = form.solutionCode === ERP_SOLUTION_CODE;
   const isPosSolution = form.solutionCode === POS_SOLUTION_CODE;
   const isSchoolErpSolution = form.solutionCode === SCHOOL_ERP_SOLUTION_CODE;
-  const canUseCustomTier = Boolean(isErpSolution);
-  const needsErpFeaturePicker = Boolean(isErpSolution && form.tier === 'Custom');
+  const needsErpFeaturePicker = Boolean(isErpSolution);
   const editSolutionTabs = useMemo(() => {
     if (!editingItem) return [] as SolutionCode[];
 
@@ -520,33 +492,6 @@ export default function AppInstancesPage() {
     const slug = (fromEditing ?? fromRefs ?? '').trim();
     return slug && isValidErpOrgIdCandidate(slug) ? slug : undefined;
   };
-
-  useEffect(() => {
-    const loadModuleCatalog = async () => {
-      if (!isModalOpen) {
-        return;
-      }
-
-      if (!form.solutionId) {
-        setModuleCatalog([]);
-        setModuleCatalogLoading(false);
-        return;
-      }
-
-      setModuleCatalogLoading(true);
-      try {
-        const items = await getAppInstanceModuleCatalog({ solutionId: form.solutionId });
-        setModuleCatalog(mergeSubscriptionModuleCatalog(items));
-      } catch (error: unknown) {
-        setModuleCatalog([]);
-        toast.error(`Gagal memuat katalog modul: ${getApiErrorMessage(error)}`);
-      } finally {
-        setModuleCatalogLoading(false);
-      }
-    };
-
-    void loadModuleCatalog();
-  }, [form.solutionId, isModalOpen]);
 
   useEffect(() => {
     const load = async () => {
@@ -624,15 +569,21 @@ export default function AppInstancesPage() {
     const organizationId = resolveErpOrganizationId();
 
     const features =
-      tier === 'Custom'
+      erpSelectedFeatures.length > 0
         ? erpSelectedFeatures
-        : ERP_TIER_FEATURES[tier as 'Standard' | 'Professional' | 'Enterprise'];
+        : ERP_TIER_FEATURES[
+            (tier === 'Professional' || tier === 'Enterprise' ? tier : 'Standard') as
+              'Standard' | 'Professional' | 'Enterprise'
+          ];
 
     await provisionErp({
       tenantId: form.tenantId,
       organizationId,
       organizationName: tenant?.name,
       features,
+      adminEmail: form.adminEmail.trim() || undefined,
+      adminPassword: form.adminPassword.trim() || undefined,
+      adminName: form.adminName.trim() || tenant?.name || undefined,
     });
   };
 
@@ -676,6 +627,16 @@ export default function AppInstancesPage() {
   };
 
   const openSolutionApp = (item: AppInstance) => {
+    if (item.status !== 'ACTIVE') {
+      toast.message('Subscription ini sedang tidak aktif.');
+      return;
+    }
+
+    if (isSubscriptionExpired(item.endDate ?? null)) {
+      toast.message('Subscription ini sudah melewati end date dan aksesnya dimatikan.');
+      return;
+    }
+
     const code = item.solution.code;
     const configuredOrigin =
       code === 'ERP'
@@ -684,7 +645,9 @@ export default function AppInstancesPage() {
           ? POS_WEB_ORIGIN
           : code === 'CLINIC'
             ? CLINIC_WEB_ORIGIN
-            : '';
+            : code === 'SCHOOL_ERP'
+              ? SCHOOL_ERP_WEB_ORIGIN
+              : '';
 
     let origin = configuredOrigin.trim();
     if (!origin && item.appUrl) {
@@ -705,9 +668,14 @@ export default function AppInstancesPage() {
       return;
     }
 
-    const tenantLoginUrl = `${origin}/t/${item.tenant.slug}/login`;
     const urlToOpen =
-      code === 'ERP' || code === 'POS' || code === 'CLINIC' ? tenantLoginUrl : item.appUrl ?? origin;
+      code === 'ERP'
+        ? `${origin}/erp/${item.tenant.slug}/login`
+        : code === 'POS' || code === 'CLINIC'
+          ? `${origin}/t/${item.tenant.slug}/login`
+          : code === 'SCHOOL_ERP'
+            ? `${origin}/login?tenantSlug=${encodeURIComponent(item.tenant.slug)}`
+            : item.appUrl ?? origin;
 
     window.open(urlToOpen, '_blank', 'noopener,noreferrer');
   };
@@ -718,6 +686,18 @@ export default function AppInstancesPage() {
     if (!form.solutionId) {
       toast.error('Solution belum tersedia. Pastikan solusi POS / ERP / MEDICAL / SCHOOL_ERP sudah aktif.');
       return;
+    }
+
+    if (isNonPosClientProvisionedSolution(form.solutionCode)) {
+      if (!form.adminEmail.trim()) {
+        toast.error('Email admin produk wajib diisi untuk subscription non-POS.');
+        return;
+      }
+
+      if (!editingItem && !form.adminPassword.trim()) {
+        toast.error('Password admin produk wajib diisi saat membuat subscription non-POS.');
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -750,6 +730,11 @@ export default function AppInstancesPage() {
           addons: mapModulesToLegacyAddons(moduleKeys),
           syncMode: form.syncMode,
           status: form.status,
+          adminEmail: isNonPosClientProvisionedSolution(form.solutionCode) ? form.adminEmail.trim() : null,
+          adminPassword: isNonPosClientProvisionedSolution(form.solutionCode)
+            ? (form.adminPassword.trim() || undefined)
+            : null,
+          adminName: isNonPosClientProvisionedSolution(form.solutionCode) ? (form.adminName.trim() || null) : null,
           endDate: form.endDate ? form.endDate : null,
         });
 
@@ -775,6 +760,9 @@ export default function AppInstancesPage() {
           addons: mapModulesToLegacyAddons(moduleKeys),
           syncMode: form.syncMode,
           status: form.status,
+          adminEmail: isNonPosClientProvisionedSolution(form.solutionCode) ? form.adminEmail.trim() : null,
+          adminPassword: isNonPosClientProvisionedSolution(form.solutionCode) ? form.adminPassword.trim() : null,
+          adminName: isNonPosClientProvisionedSolution(form.solutionCode) ? (form.adminName.trim() || null) : null,
           endDate: form.endDate ? form.endDate : null,
         });
 
@@ -826,13 +814,17 @@ export default function AppInstancesPage() {
         ? 'SUSPENDED'
         : 'ACTIVE';
 
+      const hasBlockedAccess = sortedInstances.some(
+        (instance) => instance.status !== 'ACTIVE' || isSubscriptionExpired(instance.endDate ?? null)
+      );
+
       rows.push({
         tenantId,
         tenantName: primary.tenant.name,
         tenantSlug: primary.tenant.slug,
         instances: sortedInstances,
         primary,
-        aggregatedStatus,
+        aggregatedStatus: hasBlockedAccess ? 'SUSPENDED' : aggregatedStatus,
       });
     }
 
@@ -953,30 +945,38 @@ export default function AppInstancesPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <select
-                      value={item.tier}
-                      onChange={(event) => {
-                        const nextTier = event.target.value as SubscriptionTier;
-                        setTenantSubscriptions((prev) =>
-                          prev.map((current) =>
-                            current.id === item.id ? { ...current, tier: nextTier } : current
-                          )
-                        );
-                      }}
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/30 focus:ring"
-                    >
-                      <option value="Standard">Standard</option>
-                      <option value="Professional">Professional</option>
-                      <option value="Enterprise">Enterprise</option>
-                    </select>
-                    <button
-                      type="button"
-                      disabled={savingTierId === item.id}
-                      onClick={() => onSaveTier(item, item.tier)}
-                      className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {savingTierId === item.id ? 'Saving...' : 'Save Tier'}
-                    </button>
+                    {item.solution.code === POS_SOLUTION_CODE ? (
+                      <>
+                        <select
+                          value={item.tier}
+                          onChange={(event) => {
+                            const nextTier = event.target.value as SubscriptionTier;
+                            setTenantSubscriptions((prev) =>
+                              prev.map((current) =>
+                                current.id === item.id ? { ...current, tier: nextTier } : current
+                              )
+                            );
+                          }}
+                          className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/30 focus:ring"
+                        >
+                          <option value="Standard">Standard</option>
+                          <option value="Professional">Professional</option>
+                          <option value="Enterprise">Enterprise</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={savingTierId === item.id}
+                          onClick={() => onSaveTier(item, item.tier)}
+                          className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {savingTierId === item.id ? 'Saving...' : 'Save Tier'}
+                        </button>
+                      </>
+                    ) : (
+                      <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
+                        Tier: {item.tier}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))
@@ -1020,14 +1020,16 @@ export default function AppInstancesPage() {
                         <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                           {instance.solution.code}: {instance.tier}
                         </span>
-                        <span
-                          className={[
-                            'inline-flex rounded-full px-2 py-1 text-xs font-semibold',
-                            getSyncModeBadgeClass(instance.syncMode ?? 'CLOUD_FIRST'),
-                          ].join(' ')}
-                        >
-                          Sync: {SYNC_MODE_LABELS[instance.syncMode ?? 'CLOUD_FIRST']}
-                        </span>
+                        {instance.solution.code === POS_SOLUTION_CODE ? (
+                          <span
+                            className={[
+                              'inline-flex rounded-full px-2 py-1 text-xs font-semibold',
+                              getSyncModeBadgeClass(instance.syncMode ?? 'CLOUD_FIRST'),
+                            ].join(' ')}
+                          >
+                            Sync: {SYNC_MODE_LABELS[instance.syncMode ?? 'CLOUD_FIRST']}
+                          </span>
+                        ) : null}
                       </div>
                       {instance.solution.code === SCHOOL_ERP_SOLUTION_CODE ? (
                         <div className="flex flex-wrap items-center gap-1">
@@ -1073,8 +1075,20 @@ export default function AppInstancesPage() {
                       key={instance.id}
                       type="button"
                       onClick={() => openSolutionApp(instance)}
-                      className={getSolutionButtonClasses(instance.solution.code)}
-                      title={`Buka ${instance.solution.code}`}
+                      disabled={instance.status !== 'ACTIVE' || isSubscriptionExpired(instance.endDate ?? null)}
+                      className={[
+                        getSolutionButtonClasses(instance.solution.code),
+                        instance.status !== 'ACTIVE' || isSubscriptionExpired(instance.endDate ?? null)
+                          ? 'cursor-not-allowed opacity-50'
+                          : '',
+                      ].join(' ')}
+                      title={
+                        instance.status !== 'ACTIVE'
+                          ? `${instance.solution.code} sedang nonaktif`
+                          : isSubscriptionExpired(instance.endDate ?? null)
+                            ? `${instance.solution.code} sudah expired`
+                            : `Buka ${instance.solution.code}`
+                      }
                     >
                       {instance.solution.code}
                     </button>
@@ -1182,20 +1196,21 @@ export default function AppInstancesPage() {
               </label>
             ) : null}
 
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-slate-700">Tier *</span>
-              <select
-                required
-                value={form.tier}
-                onChange={(event) => onChangeField('tier', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-              >
-                <option value="Standard">Standard</option>
-                <option value="Professional">Professional</option>
-                <option value="Enterprise">Enterprise</option>
-                {canUseCustomTier ? <option value="Custom">Custom</option> : null}
-              </select>
-            </label>
+            {isPosSolution ? (
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-slate-700">Tier *</span>
+                <select
+                  required
+                  value={form.tier}
+                  onChange={(event) => onChangeField('tier', event.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+                >
+                  <option value="Standard">Standard</option>
+                  <option value="Professional">Professional</option>
+                  <option value="Enterprise">Enterprise</option>
+                </select>
+              </label>
+            ) : null}
 
             <label className="space-y-1">
               <span className="text-sm font-medium text-slate-700">Status *</span>
@@ -1210,18 +1225,20 @@ export default function AppInstancesPage() {
               </select>
             </label>
 
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-slate-700">Mode Sinkronisasi (POS)</span>
-              <select
-                value={form.syncMode}
-                onChange={(event) => onChangeField('syncMode', event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-              >
-                <option value="CLOUD_FIRST">Cloud First (Full Online)</option>
-                <option value="LOCAL_FIRST">Local First (Offline Mandiri)</option>
-                <option value="LOCAL_SERVER">Local Server (Multi-Device Offline)</option>
-              </select>
-            </label>
+            {isPosSolution ? (
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-slate-700">Mode Sinkronisasi (POS)</span>
+                <select
+                  value={form.syncMode}
+                  onChange={(event) => onChangeField('syncMode', event.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+                >
+                  <option value="CLOUD_FIRST">Cloud First (Full Online)</option>
+                  <option value="LOCAL_FIRST">Local First (Offline Mandiri)</option>
+                  <option value="LOCAL_SERVER">Local Server (Multi-Device Offline)</option>
+                </select>
+              </label>
+            ) : null}
 
             <label className="space-y-1">
               <span className="text-sm font-medium text-slate-700">End Date</span>
@@ -1235,47 +1252,50 @@ export default function AppInstancesPage() {
             </label>
           </div>
 
-          {isPosSolution ? (
-            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-sm font-semibold text-dark">Modules (Feature Flags)</p>
+          {isNonPosClientProvisionedSolution(form.solutionCode) ? (
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-dark">Admin Produk</p>
               <p className="text-xs text-slate-600">
-                Daftar modul POS diambil dari backend sesuai solution yang sedang dipilih.
+                Email dan password ini dipakai sebagai superadmin awal untuk produk non-POS yang dikelola client.
               </p>
-              {moduleCatalogLoading ? (
-                <p className="text-sm text-slate-600">Memuat katalog modul...</p>
-              ) : normalizedModuleCatalog.length === 0 ? (
-                <p className="text-sm text-slate-600">Katalog modul POS belum tersedia untuk solution ini.</p>
-              ) : (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {normalizedModuleCatalog.map((moduleOption) => (
-                    <label
-                      key={moduleOption.key}
-                      className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.modules.includes(moduleOption.key)}
-                        onChange={() => toggleModule(moduleOption.key)}
-                        className="mt-1"
-                      />
-                      <span className="block">
-                        <span className="flex items-center gap-2 text-sm font-medium text-dark">
-                          <span>{moduleOption.name}</span>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                            {moduleOption.status}
-                          </span>
-                        </span>
-                        <span className="block text-xs text-slate-500">{moduleOption.key}</span>
-                        {moduleOption.description ? (
-                          <span className="block text-xs text-slate-500">{moduleOption.description}</span>
-                        ) : null}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-slate-700">Nama Admin</span>
+                  <input
+                    type="text"
+                    value={form.adminName}
+                    onChange={(event) => onChangeField('adminName', event.target.value)}
+                    placeholder="Admin Company"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-slate-700">Email Admin *</span>
+                  <input
+                    type="email"
+                    value={form.adminEmail}
+                    onChange={(event) => onChangeField('adminEmail', event.target.value)}
+                    placeholder="admin@company.com"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-sm font-medium text-slate-700">
+                    Password Admin {editingItem ? '(isi hanya jika ingin mengganti)' : '*'}
+                  </span>
+                  <input
+                    type="text"
+                    value={form.adminPassword}
+                    onChange={(event) => onChangeField('adminPassword', event.target.value)}
+                    placeholder={editingItem ? 'Kosongkan jika tidak ingin mengubah password' : 'Masukkan password admin'}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+                  />
+                </label>
+              </div>
             </div>
-          ) : isSchoolErpSolution ? (
+          ) : null}
+
+          {isSchoolErpSolution ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-semibold text-dark">Active Modules (SCHOOL_ERP)</p>
               <p className="text-xs text-slate-600">Pilih modul SCHOOL_ERP yang diaktifkan untuk tenant ini.</p>
@@ -1295,18 +1315,18 @@ export default function AppInstancesPage() {
                 ))}
               </div>
             </div>
-          ) : form.solutionCode ? (
+          ) : form.solutionCode && !isPosSolution ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-semibold text-dark">Modules</p>
               <p className="text-sm text-slate-600">
-                Solution ini tidak memakai katalog modul POS. Jika solution adalah ERP, gunakan pemilih fitur ERP di bawah.
+                Solution ini tidak memakai katalog modul POS. Jika solution adalah ERP, gunakan checklist fitur ERP yang mengikuti modul/RBAC aplikasi ERP.
               </p>
             </div>
           ) : null}
 
           {needsErpFeaturePicker ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-sm font-semibold text-dark">ERP Features (Custom)</p>
+              <p className="text-sm font-semibold text-dark">ERP Features</p>
               {erpPrefillLoading ? (
                 <p className="text-sm text-slate-600">Memuat fitur aktif...</p>
               ) : null}

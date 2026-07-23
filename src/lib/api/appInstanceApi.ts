@@ -26,6 +26,8 @@ export type AppInstance = {
   status: AppInstanceStatus;
   dbConnectionString?: string | null;
   appUrl?: string | null;
+  adminEmail?: string | null;
+  adminName?: string | null;
   endDate?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +56,9 @@ export type CreateAppInstancePayload = {
   status?: AppInstanceStatus;
   dbConnectionString?: string | null;
   appUrl?: string | null;
+  adminEmail?: string | null;
+  adminPassword?: string | null;
+  adminName?: string | null;
   endDate?: string | null;
 };
 
@@ -68,6 +73,9 @@ export type UpdateAppInstancePayload = {
   status?: AppInstanceStatus;
   dbConnectionString?: string | null;
   appUrl?: string | null;
+  adminEmail?: string | null;
+  adminPassword?: string | null;
+  adminName?: string | null;
   endDate?: string | null;
 };
 
