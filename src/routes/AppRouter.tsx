@@ -55,7 +55,8 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 export default function AppRouter() {
   return (
     <Routes>
-      <Route path="/" element={withSuspense(<PosLandingPage />)} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/pos" element={withSuspense(<PosLandingPage />)} />
       <Route path="/login" element={withSuspense(<LoginPage />)} />
       <Route path="/unauthorized" element={withSuspense(<UnauthorizedPage />)} />
 
@@ -78,7 +79,7 @@ export default function AppRouter() {
         <Route path="sales/pre-orders" element={withSuspense(<PreOrdersPage />)} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
