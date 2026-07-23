@@ -5,15 +5,18 @@ import { toast } from 'sonner';
 import {
   createAppInstance,
   deleteAppInstance,
+  getAppInstanceModuleCatalog,
   listAppInstances,
   type SyncMode,
   updateAppInstance,
   updateSubscriptionTier,
   type AppInstance,
+  type AppInstanceModuleCatalogItem,
   type AppInstanceStatus,
   type SubscriptionTier,
 } from '../../lib/api/appInstanceApi';
 import {
+  mergeSubscriptionModuleCatalog,
   mapLegacyAddonsToModules,
   mapModulesToLegacyAddons,
   sanitizeSubscriptionModules,
@@ -101,6 +104,80 @@ const ERP_FEATURE_CATALOG_FALLBACK: ErpFeatureDefinition[] = [
   { key: 'audit_trail', label: 'Audit Trail', description: 'Audit log dan pelacakan aktivitas perubahan data.' },
   { key: 'fixed_asset', label: 'Fixed Asset', description: 'Manajemen fixed asset dan depresiasi.' },
 ];
+
+const POS_MODULE_CATALOG_FALLBACK: AppInstanceModuleCatalogItem[] = mergeSubscriptionModuleCatalog([
+  { key: 'module_dashboard', name: 'Dashboard', description: 'Ringkasan operasional POS.', status: 'FALLBACK' },
+  { key: 'module_sales', name: 'Sales', description: 'Kasir dan transaksi penjualan.', status: 'FALLBACK' },
+  { key: 'module_inventory', name: 'Inventory', description: 'Stok, mutasi, dan penyesuaian barang.', status: 'FALLBACK' },
+  { key: 'module_procurement', name: 'Procurement', description: 'Belanja dan restock barang.', status: 'FALLBACK' },
+  { key: 'module_sales_history', name: 'Sales History', description: 'Riwayat dan rekap transaksi.', status: 'FALLBACK' },
+  { key: 'module_debt_management', name: 'Debt Management', description: 'Kasbon dan piutang pelanggan.', status: 'FALLBACK' },
+  {
+    key: 'module_customer_management',
+    name: 'Customer Management',
+    description: 'Data pelanggan dan histori pelanggan.',
+    status: 'FALLBACK',
+  },
+  {
+    key: 'module_finance_reports',
+    name: 'Finance Reports',
+    description: 'Laporan keuangan dan performa penjualan.',
+    status: 'FALLBACK',
+  },
+  {
+    key: 'module_expense_management',
+    name: 'Expense Management',
+    description: 'Pencatatan biaya operasional.',
+    status: 'FALLBACK',
+  },
+  {
+    key: 'module_supplier_management',
+    name: 'Supplier Management',
+    description: 'Data supplier dan pembelian.',
+    status: 'FALLBACK',
+  },
+  { key: 'module_tax_reports', name: 'Tax Reports', description: 'Pelaporan pajak transaksi.', status: 'FALLBACK' },
+  { key: 'module_user_management', name: 'User Management', description: 'Manajemen user POS.', status: 'FALLBACK' },
+  { key: 'module_role_management', name: 'Role Management', description: 'Role dan hak akses.', status: 'FALLBACK' },
+  { key: 'module_custom_rbac', name: 'Custom RBAC', description: 'Hak akses per modul/aksi.', status: 'FALLBACK' },
+  {
+    key: 'module_hardware_devices',
+    name: 'Hardware Devices',
+    description: 'Konfigurasi printer, scanner, dan device POS.',
+    status: 'FALLBACK',
+  },
+  {
+    key: 'module_realtime_sync',
+    name: 'Realtime Sync',
+    description: 'Sinkronisasi data antar device dan cloud.',
+    status: 'FALLBACK',
+  },
+  { key: 'module_settings', name: 'Settings', description: 'Pengaturan aplikasi POS.', status: 'FALLBACK' },
+  {
+    key: 'module_receipt_printing',
+    name: 'Receipt Printing',
+    description: 'Cetak struk transaksi dan invoice.',
+    status: 'FALLBACK',
+  },
+  { key: 'module_offline_mode', name: 'Offline Mode', description: 'Mode transaksi offline.', status: 'FALLBACK' },
+  {
+    key: 'module_service_orders',
+    name: 'Service Orders',
+    description: 'Service note dan pekerjaan servis.',
+    status: 'FALLBACK',
+  },
+  { key: 'module_pre_order', name: 'Pre-Order', description: 'Pesanan dengan jadwal/uang muka.', status: 'FALLBACK' },
+  { key: 'module_fnb', name: 'Table Management', description: 'Meja dan alur order F&B.', status: 'FALLBACK' },
+  { key: 'module_shift_history', name: 'Shift History', description: 'Riwayat aktivitas shift kasir.', status: 'FALLBACK' },
+  { key: 'module_hr_payroll', name: 'Payroll', description: 'Payroll dan komponen gaji.', status: 'FALLBACK' },
+  {
+    key: 'module_category_management',
+    name: 'Category Management',
+    description: 'Kategori produk dan pengelompokan item.',
+    status: 'FALLBACK',
+  },
+  { key: 'module_multi_store', name: 'Multi Store', description: 'Akses lintas cabang/store.', status: 'FALLBACK' },
+]);
 
 const SYNC_MODE_LABELS: Record<SyncMode, string> = {
   CLOUD_FIRST: 'Cloud First',
@@ -294,6 +371,8 @@ export default function AppInstancesPage() {
   const [editingItem, setEditingItem] = useState<AppInstance | null>(null);
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
+  const [moduleCatalog, setModuleCatalog] = useState<AppInstanceModuleCatalogItem[]>([]);
+  const [moduleCatalogLoading, setModuleCatalogLoading] = useState(false);
 
   const [erpFeatureCatalog, setErpFeatureCatalog] = useState<ErpFeatureDefinition[]>([]);
   const [erpFeatureLoading, setErpFeatureLoading] = useState(false);
@@ -469,6 +548,16 @@ export default function AppInstancesPage() {
     });
   };
 
+  const toggleModule = (moduleKey: SubscriptionModuleKey) => {
+    setForm((prev) => {
+      const hasModule = prev.modules.includes(moduleKey);
+      return {
+        ...prev,
+        modules: hasModule ? prev.modules.filter((item) => item !== moduleKey) : [...prev.modules, moduleKey],
+      };
+    });
+  };
+
   const isErpSolution = form.solutionCode === ERP_SOLUTION_CODE;
   const isPosSolution = form.solutionCode === POS_SOLUTION_CODE;
   const isSchoolErpSolution = form.solutionCode === SCHOOL_ERP_SOLUTION_CODE;
@@ -492,6 +581,30 @@ export default function AppInstancesPage() {
     const slug = (fromEditing ?? fromRefs ?? '').trim();
     return slug && isValidErpOrgIdCandidate(slug) ? slug : undefined;
   };
+
+  useEffect(() => {
+    const loadModuleCatalog = async () => {
+      if (!isModalOpen || !isPosSolution) {
+        return;
+      }
+
+      setModuleCatalogLoading(true);
+      try {
+        const items = await getAppInstanceModuleCatalog({
+          solutionId: form.solutionId || undefined,
+          solutionCode: form.solutionCode || undefined,
+        });
+        const nextCatalog = items.length > 0 ? items : POS_MODULE_CATALOG_FALLBACK;
+        setModuleCatalog(mergeSubscriptionModuleCatalog(nextCatalog));
+      } catch {
+        setModuleCatalog(POS_MODULE_CATALOG_FALLBACK);
+      } finally {
+        setModuleCatalogLoading(false);
+      }
+    };
+
+    void loadModuleCatalog();
+  }, [form.solutionCode, form.solutionId, isModalOpen, isPosSolution]);
 
   useEffect(() => {
     const load = async () => {
@@ -1208,6 +1321,7 @@ export default function AppInstancesPage() {
                   <option value="Standard">Standard</option>
                   <option value="Professional">Professional</option>
                   <option value="Enterprise">Enterprise</option>
+                  <option value="Custom">Custom</option>
                 </select>
               </label>
             ) : null}
@@ -1292,6 +1406,48 @@ export default function AppInstancesPage() {
                   />
                 </label>
               </div>
+            </div>
+          ) : null}
+
+          {isPosSolution ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-dark">Active Modules (POS)</p>
+              <p className="text-xs text-slate-600">
+                Tier akan mengisi template default modul POS. Pilih `Custom` jika ingin mengatur modul secara manual.
+              </p>
+              {moduleCatalogLoading ? (
+                <p className="text-sm text-slate-600">Memuat katalog modul...</p>
+              ) : moduleCatalog.length === 0 ? (
+                <p className="text-sm text-slate-600">Katalog modul belum tersedia.</p>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {moduleCatalog.map((moduleOption) => (
+                    <label
+                      key={moduleOption.key}
+                      className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.modules.includes(moduleOption.key)}
+                        onChange={() => toggleModule(moduleOption.key)}
+                        className="mt-1"
+                      />
+                      <span className="block">
+                        <span className="flex items-center gap-2 text-sm font-medium text-dark">
+                          <span>{moduleOption.name}</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                            {moduleOption.status}
+                          </span>
+                        </span>
+                        <span className="block text-xs text-slate-500">{moduleOption.key}</span>
+                        {moduleOption.description ? (
+                          <span className="block text-xs text-slate-500">{moduleOption.description}</span>
+                        ) : null}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
 
