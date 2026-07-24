@@ -787,7 +787,7 @@ export default function AppInstancesPage() {
         : code === 'POS' || code === 'CLINIC'
           ? `${origin}/t/${item.tenant.slug}/login`
           : code === 'SCHOOL_ERP'
-            ? `${origin}/login?tenantSlug=${encodeURIComponent(item.tenant.slug)}`
+            ? `${origin}/school-erp/${encodeURIComponent(item.tenant.slug)}/login`
             : item.appUrl ?? origin;
 
     window.open(urlToOpen, '_blank', 'noopener,noreferrer');
