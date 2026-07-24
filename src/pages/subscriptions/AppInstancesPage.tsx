@@ -9,7 +9,6 @@ import {
   listAppInstances,
   type SyncMode,
   updateAppInstance,
-  updateSubscriptionTier,
   type AppInstance,
   type AppInstanceModuleCatalogItem,
   type AppInstanceStatus,
@@ -365,10 +364,8 @@ export default function AppInstancesPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [solutions, setSolutions] = useState<Solution[]>([]);
   const [loadingRefs, setLoadingRefs] = useState(false);
-  const [selectedTenantId, setSelectedTenantId] = useState('');
-  const [tenantSubscriptions, setTenantSubscriptions] = useState<AppInstance[]>([]);
-  const [loadingTenantSubscriptions, setLoadingTenantSubscriptions] = useState(false);
-  const [savingTierId, setSavingTierId] = useState<string | null>(null);
+  const [tenantSearch, setTenantSearch] = useState('');
+  const [selectedSolutionFilters, setSelectedSolutionFilters] = useState<string[]>([]);
   const [expandedTenantIds, setExpandedTenantIds] = useState<string[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -430,35 +427,9 @@ export default function AppInstancesPage() {
     void fetchReferences();
   }, []);
 
-  const fetchTenantSubscriptions = async (tenantId: string) => {
-    if (!tenantId) {
-      setTenantSubscriptions([]);
-      return;
-    }
-
-    setLoadingTenantSubscriptions(true);
-    try {
-      const result = await listAppInstances({
-        page: 1,
-        limit: 100,
-        tenantId,
-      });
-      setTenantSubscriptions(result.items);
-    } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error));
-      setTenantSubscriptions([]);
-    } finally {
-      setLoadingTenantSubscriptions(false);
-    }
-  };
-
   useEffect(() => {
     void fetchAppInstances();
   }, []);
-
-  useEffect(() => {
-    void fetchTenantSubscriptions(selectedTenantId);
-  }, [selectedTenantId]);
 
   const openCreateModal = () => {
     setEditingItem(null);
@@ -967,17 +938,54 @@ export default function AppInstancesPage() {
     return rows;
   }, [items]);
 
-  const totalPages = Math.max(1, Math.ceil(groupedRows.length / PAGE_SIZE));
+  const availableSolutionFilters = useMemo(
+    () =>
+      Array.from(new Set(items.map((item) => item.solution.code)))
+        .sort((a, b) => a.localeCompare(b))
+        .map((code) => ({
+          code,
+          label: solutions.find((solution) => solution.code === code)?.name ?? code,
+        })),
+    [items, solutions]
+  );
+
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = tenantSearch.trim().toLowerCase();
+
+    return groupedRows.filter((row) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        row.tenantName.toLowerCase().includes(normalizedSearch) ||
+        row.tenantSlug.toLowerCase().includes(normalizedSearch);
+
+      if (!matchesSearch) {
+        return false;
+      }
+
+      if (selectedSolutionFilters.length === 0) {
+        return true;
+      }
+
+      const rowSolutionCodes = new Set(row.instances.map((instance) => instance.solution.code));
+      return selectedSolutionFilters.every((code) => rowSolutionCodes.has(code));
+    });
+  }, [groupedRows, selectedSolutionFilters, tenantSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pagedRows = useMemo(
-    () => groupedRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-    [PAGE_SIZE, groupedRows, safePage]
+    () => filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [PAGE_SIZE, filteredRows, safePage]
   );
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safePage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [tenantSearch, selectedSolutionFilters]);
 
   useEffect(() => {
     setExpandedTenantIds((current) => {
@@ -1009,32 +1017,6 @@ export default function AppInstancesPage() {
     }
   };
 
-  const onSaveTier = async (item: AppInstance, nextTier: SubscriptionTier) => {
-    setSavingTierId(item.id);
-    try {
-      await updateSubscriptionTier(item.id, nextTier);
-
-      if (item.solution.code === ERP_SOLUTION_CODE && nextTier !== 'Custom') {
-        const organizationId = item.tenant.slug && isValidErpOrgIdCandidate(item.tenant.slug)
-          ? item.tenant.slug
-          : undefined;
-        await provisionErp({
-          tenantId: item.tenantId,
-          organizationId,
-          organizationName: item.tenant.name,
-          features: ERP_TIER_FEATURES[nextTier],
-        });
-      }
-
-      toast.success('Tier subscription berhasil diupdate');
-      await Promise.all([fetchAppInstances(), fetchTenantSubscriptions(selectedTenantId)]);
-    } catch (error: unknown) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setSavingTierId(null);
-    }
-  };
-
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1055,85 +1037,89 @@ export default function AppInstancesPage() {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-base font-semibold text-dark">Tenant Subscription Manager</p>
-        <p className="mt-1 text-sm text-slate-600">
-          Pilih tenant untuk melihat solusi yang dimiliki beserta tier aktif, lalu ubah tier langsung.
-        </p>
-
-        <div className="mt-3 max-w-xl">
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">Tenant</span>
-            <select
-              value={selectedTenantId}
-              onChange={(event) => setSelectedTenantId(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
-            >
-              <option value="">-- Select Tenant --</option>
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name} ({tenant.slug})
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex-1">
+            <p className="text-base font-semibold text-dark">Filter Subscriptions</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Cari tenant berdasarkan nama atau slug, lalu filter tenant yang berlangganan kombinasi produk tertentu.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setTenantSearch('');
+              setSelectedSolutionFilters([]);
+            }}
+            className="self-start rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Reset Filter
+          </button>
         </div>
 
-        {selectedTenantId ? (
-          <div className="mt-4 space-y-2">
-            {loadingTenantSubscriptions ? (
-              <TableSkeleton rows={3} columns={4} />
-            ) : tenantSubscriptions.length === 0 ? (
-              <p className="text-sm text-slate-500">Tenant ini belum memiliki subscription.</p>
-            ) : (
-              tenantSubscriptions.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-3 rounded-md border border-slate-200 p-3 md:flex-row md:items-center md:justify-between"
-                >
-                  <div>
-                    <p className="font-medium text-dark">{item.solution.name}</p>
-                    <p className="text-xs text-slate-500">Code: {item.solution.code}</p>
-                  </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Cari Tenant</span>
+            <input
+              type="text"
+              value={tenantSearch}
+              onChange={(event) => setTenantSearch(event.target.value)}
+              placeholder="Cari nama tenant atau slug..."
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            />
+          </label>
 
-                  <div className="flex items-center gap-2">
-                    {item.solution.code === POS_SOLUTION_CODE ? (
-                      <>
-                        <select
-                          value={item.tier}
-                          onChange={(event) => {
-                            const nextTier = event.target.value as SubscriptionTier;
-                            setTenantSubscriptions((prev) =>
-                              prev.map((current) =>
-                                current.id === item.id ? { ...current, tier: nextTier } : current
-                              )
-                            );
-                          }}
-                          className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/30 focus:ring"
-                        >
-                          <option value="Standard">Standard</option>
-                          <option value="Professional">Professional</option>
-                          <option value="Enterprise">Enterprise</option>
-                        </select>
-                        <button
-                          type="button"
-                          disabled={savingTierId === item.id}
-                          onClick={() => onSaveTier(item, item.tier)}
-                          className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {savingTierId === item.id ? 'Saving...' : 'Save Tier'}
-                        </button>
-                      </>
-                    ) : (
-                      <span className="rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
-                        Tier: {item.tier}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
+          <div className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Filter Produk</span>
+            <div className="flex min-h-[42px] flex-wrap items-center gap-2 rounded-md border border-slate-300 px-3 py-2">
+              {availableSolutionFilters.length === 0 ? (
+                <span className="text-sm text-slate-500">Belum ada produk.</span>
+              ) : (
+                availableSolutionFilters.map((solution) => {
+                  const isSelected = selectedSolutionFilters.includes(solution.code);
+
+                  return (
+                    <button
+                      key={solution.code}
+                      type="button"
+                      onClick={() =>
+                        setSelectedSolutionFilters((current) =>
+                          current.includes(solution.code)
+                            ? current.filter((code) => code !== solution.code)
+                            : [...current, solution.code]
+                        )
+                      }
+                      className={[
+                        'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                        isSelected
+                          ? 'border-primary bg-primary text-white'
+                          : 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200/70',
+                      ].join(' ')}
+                    >
+                      {solution.code}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              Jika memilih beberapa produk, hanya tenant yang memiliki semua produk tersebut yang akan tampil.
+            </p>
           </div>
-        ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span>
+            Menampilkan {filteredRows.length} tenant dari {groupedRows.length} tenant
+          </span>
+          {selectedSolutionFilters.map((code) => (
+            <span
+              key={code}
+              className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700"
+            >
+              {code}
+            </span>
+          ))}
+        </div>
       </div>
 
       {loadingTable ? (
