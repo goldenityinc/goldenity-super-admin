@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   createAppInstance,
@@ -32,7 +32,6 @@ import {
 import { listSolutions, type Solution } from '../../lib/api/solutionApi';
 import { listTenants, type Tenant } from '../../lib/api/tenantApi';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
-import DataTable from '../../components/common/DataTable';
 import Pagination from '../../components/common/Pagination';
 import TableSkeleton from '../../components/common/TableSkeleton';
 import Modal from '../../components/common/Modal';
@@ -256,6 +255,10 @@ function isSubscriptionExpired(value: string | null | undefined): boolean {
   return end.getTime() < Date.now();
 }
 
+function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
 function isNonPosClientProvisionedSolution(code: '' | SolutionCode): boolean {
   return Boolean(code && code !== POS_SOLUTION_CODE);
 }
@@ -366,6 +369,7 @@ export default function AppInstancesPage() {
   const [tenantSubscriptions, setTenantSubscriptions] = useState<AppInstance[]>([]);
   const [loadingTenantSubscriptions, setLoadingTenantSubscriptions] = useState(false);
   const [savingTierId, setSavingTierId] = useState<string | null>(null);
+  const [expandedTenantIds, setExpandedTenantIds] = useState<string[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AppInstance | null>(null);
@@ -736,20 +740,10 @@ export default function AppInstancesPage() {
       return [];
     }
 
-      return getSchoolErpModulesFromInstance(instance);
+    return getSchoolErpModulesFromInstance(instance);
   };
 
-  const openSolutionApp = (item: AppInstance) => {
-    if (item.status !== 'ACTIVE') {
-      toast.message('Subscription ini sedang tidak aktif.');
-      return;
-    }
-
-    if (isSubscriptionExpired(item.endDate ?? null)) {
-      toast.message('Subscription ini sudah melewati end date dan aksesnya dimatikan.');
-      return;
-    }
-
+  const getSolutionLoginUrl = (item: AppInstance): string | null => {
     const code = item.solution.code;
     const configuredOrigin =
       code === 'ERP'
@@ -765,32 +759,60 @@ export default function AppInstancesPage() {
     let origin = configuredOrigin.trim();
     if (!origin && item.appUrl) {
       try {
-        origin = new URL(item.appUrl).origin;
+        origin = normalizeOrigin(new URL(item.appUrl).origin);
       } catch {
         // ignore invalid appUrl, we'll show an error below
       }
     }
 
     if (!origin) {
-      if (item.appUrl) {
-        window.open(item.appUrl, '_blank', 'noopener,noreferrer');
-        return;
-      }
-
-      toast.message('Link aplikasi belum tersedia untuk subscription ini.');
-      return;
+      return item.appUrl ?? null;
     }
 
-    const urlToOpen =
+    return (
       code === 'ERP'
         ? `${origin}/erp/${item.tenant.slug}/login`
         : code === 'POS' || code === 'CLINIC'
           ? `${origin}/t/${item.tenant.slug}/login`
           : code === 'SCHOOL_ERP'
             ? `${origin}/school-erp/${encodeURIComponent(item.tenant.slug)}/login`
-            : item.appUrl ?? origin;
+            : item.appUrl ?? origin
+    );
+  };
+
+  const openSolutionApp = (item: AppInstance) => {
+    if (item.status !== 'ACTIVE') {
+      toast.message('Subscription ini sedang tidak aktif.');
+      return;
+    }
+
+    if (isSubscriptionExpired(item.endDate ?? null)) {
+      toast.message('Subscription ini sudah melewati end date dan aksesnya dimatikan.');
+      return;
+    }
+
+    const urlToOpen = getSolutionLoginUrl(item);
+    if (!urlToOpen) {
+      toast.message('Link aplikasi belum tersedia untuk subscription ini.');
+      return;
+    }
 
     window.open(urlToOpen, '_blank', 'noopener,noreferrer');
+  };
+
+  const copyLoginUrl = async (item: AppInstance) => {
+    const url = getSolutionLoginUrl(item);
+    if (!url) {
+      toast.message('Link login belum tersedia untuk subscription ini.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(`URL login ${item.solution.code} berhasil disalin`);
+    } catch {
+      toast.error('Gagal menyalin URL login.');
+    }
   };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -954,6 +976,19 @@ export default function AppInstancesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safePage]);
 
+  useEffect(() => {
+    setExpandedTenantIds((current) => {
+      const visibleIds = new Set(pagedRows.map((row) => row.tenantId));
+      const kept = current.filter((tenantId) => visibleIds.has(tenantId));
+      if (kept.length > 0) {
+        return kept;
+      }
+
+      const firstTenantId = pagedRows[0]?.tenantId;
+      return firstTenantId ? [firstTenantId] : [];
+    });
+  }, [pagedRows]);
+
   const onDelete = async () => {
     if (!deletingItem) return;
 
@@ -1100,136 +1135,215 @@ export default function AppInstancesPage() {
 
       {loadingTable ? (
         <TableSkeleton rows={6} columns={5} />
+      ) : groupedRows.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+          {tableError ?? 'Belum ada subscription/app instance.'}
+        </div>
       ) : (
-        <DataTable
-          headers={['Client', 'Solution', 'Subscription', 'Status', 'Actions']}
-          hasData={groupedRows.length > 0}
-          emptyMessage={tableError ?? 'Belum ada subscription/app instance.'}
-        >
-          {pagedRows.map((row) => (
-            <tr key={row.tenantId} className="hover:bg-slate-50/70">
-              <td className="px-4 py-3 font-medium text-dark">{row.tenantName}</td>
-              <td className="px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {row.instances.map((instance) => (
-                    <span
-                      key={instance.id}
-                      className={[
-                        'rounded-full px-2 py-0.5 text-xs font-semibold',
-                        getSolutionBadgeClasses(instance.solution.code),
-                      ].join(' ')}
-                      title={instance.solution.name}
-                    >
-                      {instance.solution.code}
-                    </span>
-                  ))}
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                <div className="space-y-2">
-                  {row.instances.map((instance) => (
-                    <div key={instance.id} className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                          {instance.solution.code}: {instance.tier}
-                        </span>
-                        {instance.solution.code === POS_SOLUTION_CODE ? (
-                          <span
-                            className={[
-                              'inline-flex rounded-full px-2 py-1 text-xs font-semibold',
-                              getSyncModeBadgeClass(instance.syncMode ?? 'CLOUD_FIRST'),
-                            ].join(' ')}
-                          >
-                            Sync: {SYNC_MODE_LABELS[instance.syncMode ?? 'CLOUD_FIRST']}
-                          </span>
-                        ) : null}
-                      </div>
-                      {instance.solution.code === SCHOOL_ERP_SOLUTION_CODE ? (
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className="text-xs text-slate-500">Modules:</span>
-                          {getInstanceActiveModules(instance).length > 0 ? (
-                            getInstanceActiveModules(instance).map((module) => (
-                              <span
-                                key={`${instance.id}-${module}`}
-                                className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
-                              >
-                                {module}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-slate-500">-</span>
-                          )}
-                        </div>
-                      ) : null}
-                      <div className="text-xs text-slate-500">
-                        Sisa: {formatRemaining(instance.endDate ?? null)} • End:{' '}
-                        {formatEndDate(instance.endDate ?? null)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                <span
-                  className={[
-                    'rounded-full px-2 py-1 text-xs font-semibold',
-                    row.aggregatedStatus === 'ACTIVE'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-red-100 text-red-700',
-                  ].join(' ')}
+        <div className="space-y-4">
+          {pagedRows.map((row) => {
+            const isExpanded = expandedTenantIds.includes(row.tenantId);
+
+            return (
+              <div key={row.tenantId} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedTenantIds((current) =>
+                      current.includes(row.tenantId)
+                        ? current.filter((tenantId) => tenantId !== row.tenantId)
+                        : [...current, row.tenantId]
+                    )
+                  }
+                  className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-slate-50"
                 >
-                  {row.aggregatedStatus}
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  {row.instances.map((instance) => (
-                    <button
-                      key={instance.id}
-                      type="button"
-                      onClick={() => openSolutionApp(instance)}
-                      disabled={instance.status !== 'ACTIVE' || isSubscriptionExpired(instance.endDate ?? null)}
-                      className={[
-                        getSolutionButtonClasses(instance.solution.code),
-                        instance.status !== 'ACTIVE' || isSubscriptionExpired(instance.endDate ?? null)
-                          ? 'cursor-not-allowed opacity-50'
-                          : '',
-                      ].join(' ')}
-                      title={
-                        instance.status !== 'ACTIVE'
-                          ? `${instance.solution.code} sedang nonaktif`
-                          : isSubscriptionExpired(instance.endDate ?? null)
-                            ? `${instance.solution.code} sudah expired`
-                            : `Buka ${instance.solution.code}`
-                      }
-                    >
-                      {instance.solution.code}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(row.primary)}
-                    className="rounded-md p-1.5 text-yellow-600 hover:bg-yellow-50"
-                    title="Edit"
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeletingItem(row.primary);
-                      setIsDeleteOpen(true);
-                    }}
-                    className="rounded-md p-1.5 text-red-600 hover:bg-red-50"
-                    title="Delete"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </DataTable>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-base font-semibold text-dark">{row.tenantName}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                        {row.tenantSlug}
+                      </span>
+                      <span
+                        className={[
+                          'rounded-full px-2 py-0.5 text-xs font-semibold',
+                          row.aggregatedStatus === 'ACTIVE'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-red-100 text-red-700',
+                        ].join(' ')}
+                      >
+                        {row.aggregatedStatus}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-slate-500">
+                        {row.instances.length} produk tersubscribe
+                      </span>
+                      {row.instances.map((instance) => (
+                        <span
+                          key={instance.id}
+                          className={[
+                            'rounded-full px-2 py-0.5 text-xs font-semibold',
+                            getSolutionBadgeClasses(instance.solution.code),
+                          ].join(' ')}
+                        >
+                          {instance.solution.code}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <span className="mt-1 rounded-md border border-slate-200 bg-white p-1 text-slate-500">
+                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </span>
+                </button>
+
+                {isExpanded ? (
+                  <div className="border-t border-slate-200 bg-slate-50/50 p-4">
+                    <div className="space-y-3">
+                      {row.instances.map((instance) => {
+                        const loginUrl = getSolutionLoginUrl(instance);
+                        const isBlocked =
+                          instance.status !== 'ACTIVE' || isSubscriptionExpired(instance.endDate ?? null);
+
+                        return (
+                          <div
+                            key={instance.id}
+                            className="rounded-xl border border-slate-200 bg-white p-4"
+                          >
+                            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                              <div className="space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={[
+                                      'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                      getSolutionBadgeClasses(instance.solution.code),
+                                    ].join(' ')}
+                                  >
+                                    {instance.solution.code}
+                                  </span>
+                                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                                    Tier: {instance.tier}
+                                  </span>
+                                  {instance.solution.code === POS_SOLUTION_CODE ? (
+                                    <span
+                                      className={[
+                                        'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                        getSyncModeBadgeClass(instance.syncMode ?? 'CLOUD_FIRST'),
+                                      ].join(' ')}
+                                    >
+                                      Sync: {SYNC_MODE_LABELS[instance.syncMode ?? 'CLOUD_FIRST']}
+                                    </span>
+                                  ) : null}
+                                  <span
+                                    className={[
+                                      'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                      instance.status === 'ACTIVE'
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-red-100 text-red-700',
+                                    ].join(' ')}
+                                  >
+                                    {instance.status}
+                                  </span>
+                                  {isSubscriptionExpired(instance.endDate ?? null) ? (
+                                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                                      Expired
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                {instance.solution.code === SCHOOL_ERP_SOLUTION_CODE ? (
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <span className="text-xs text-slate-500">Modules:</span>
+                                    {getInstanceActiveModules(instance).length > 0 ? (
+                                      getInstanceActiveModules(instance).map((module) => (
+                                        <span
+                                          key={`${instance.id}-${module}`}
+                                          className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+                                        >
+                                          {module}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-xs text-slate-500">-</span>
+                                    )}
+                                  </div>
+                                ) : null}
+
+                                <div className="text-xs text-slate-500">
+                                  Sisa: {formatRemaining(instance.endDate ?? null)} • End:{' '}
+                                  {formatEndDate(instance.endDate ?? null)}
+                                </div>
+
+                                <div className="space-y-1">
+                                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                                    URL Login
+                                  </div>
+                                  <div className="flex flex-col gap-2 md:flex-row">
+                                    <input
+                                      readOnly
+                                      value={loginUrl ?? 'Link belum tersedia'}
+                                      className="min-w-0 flex-1 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => copyLoginUrl(instance)}
+                                        disabled={!loginUrl}
+                                        className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        <Copy size={14} />
+                                        Copy URL
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => openSolutionApp(instance)}
+                                        disabled={isBlocked}
+                                        className={[
+                                          getSolutionButtonClasses(instance.solution.code),
+                                          'inline-flex items-center gap-1',
+                                          isBlocked ? 'cursor-not-allowed opacity-50' : '',
+                                        ].join(' ')}
+                                      >
+                                        <ExternalLink size={14} />
+                                        Buka
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-start">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(instance)}
+                                  className="rounded-md border border-yellow-200 p-2 text-yellow-600 hover:bg-yellow-50"
+                                  title={`Edit ${instance.solution.code}`}
+                                >
+                                  <Pencil size={16} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDeletingItem(instance);
+                                    setIsDeleteOpen(true);
+                                  }}
+                                  className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"
+                                  title={`Delete ${instance.solution.code}`}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       <Pagination page={safePage} totalPages={totalPages} onPageChange={setPage} />
