@@ -969,7 +969,10 @@ export default function AppInstancesPage() {
 
   const totalPages = Math.max(1, Math.ceil(groupedRows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const pagedRows = groupedRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pagedRows = useMemo(
+    () => groupedRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [PAGE_SIZE, groupedRows, safePage]
+  );
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage);
