@@ -130,11 +130,17 @@ export async function listTenants(params: {
       meta: response.data.meta as PaginationMeta,
     };
   } catch (error) {
+    const maybeAxiosError = error as {
+      response?: {
+        data?: unknown;
+        status?: number;
+      };
+    };
     console.error('GET /tenants failed', {
       params,
       error,
-      response: (error as any)?.response?.data,
-      status: (error as any)?.response?.status,
+      response: maybeAxiosError.response?.data,
+      status: maybeAxiosError.response?.status,
     });
     throw error;
   }

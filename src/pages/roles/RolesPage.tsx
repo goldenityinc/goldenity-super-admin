@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Pencil } from 'lucide-react';
 import { toast } from 'sonner';
@@ -8,12 +8,14 @@ import {
   updateRole,
   type Role,
 } from '../../lib/api/roleApi';
+import { listTenants, type Tenant } from '../../lib/api/tenantApi';
 import {
   ROLE_MODULES,
   createDefaultRolePermissions,
   type RolePermissions,
 } from '../../lib/constants/roleModules';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
+import { useAuth } from '../../context/useAuth';
 
 type RoleFormState = {
   name: string;
@@ -45,9 +47,17 @@ function normalizePermissions(input?: RolePermissions | null): RolePermissions {
 }
 
 export default function RolesPage() {
+  const { isSuperAdmin } = useAuth();
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [tenantId, setTenantId] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return window.localStorage.getItem('roles.activeTenantId') ?? '';
+  });
 
   const [form, setForm] = useState<RoleFormState>(createInitialRoleForm);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -58,11 +68,17 @@ export default function RolesPage() {
     [form.permissions],
   );
 
-  const fetchRoles = async () => {
+  const fetchRoles = useCallback(async () => {
+    if (isSuperAdmin && !tenantId) {
+      setRoles([]);
+      setError('Pilih tenant terlebih dahulu untuk memuat roles.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const result = await listRoles();
+      const result = await listRoles({ tenantId: isSuperAdmin ? tenantId : undefined });
       setRoles(result);
     } catch (fetchError: unknown) {
       const message = getApiErrorMessage(fetchError);
@@ -71,11 +87,37 @@ export default function RolesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isSuperAdmin, tenantId]);
 
   useEffect(() => {
     void fetchRoles();
-  }, []);
+  }, [fetchRoles]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) {
+      return;
+    }
+
+    let isActive = true;
+    setLoadingTenants(true);
+    void listTenants({ page: 1, limit: 100 })
+      .then((result) => {
+        if (!isActive) return;
+        setTenants(result.items);
+      })
+      .catch((fetchError: unknown) => {
+        if (!isActive) return;
+        toast.error(`Gagal memuat daftar tenant: ${getApiErrorMessage(fetchError)}`);
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setLoadingTenants(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isSuperAdmin]);
 
   const resetForm = () => {
     setForm(createInitialRoleForm());
@@ -103,6 +145,12 @@ export default function RolesPage() {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (isSuperAdmin && !tenantId) {
+      toast.error('Pilih tenant terlebih dahulu sebelum menyimpan role.');
+      return;
+    }
+
     setSubmitting(true);
 
     const payload = {
@@ -113,10 +161,10 @@ export default function RolesPage() {
 
     try {
       if (editingRole) {
-        await updateRole(editingRole.id, payload);
+        await updateRole(editingRole.id, payload, { tenantId: isSuperAdmin ? tenantId : undefined });
         toast.success('Role berhasil diperbarui');
       } else {
-        await createRole(payload);
+        await createRole(payload, { tenantId: isSuperAdmin ? tenantId : undefined });
         toast.success('Role berhasil dibuat');
       }
 
@@ -135,6 +183,41 @@ export default function RolesPage() {
         <h1 className="text-2xl font-semibold text-dark">Manajemen Role</h1>
         <p className="text-slate-600">Atur role beserta izin modul untuk pengguna tenant.</p>
       </div>
+
+      {isSuperAdmin ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Tenant *</span>
+              <select
+                value={tenantId}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTenantId(value);
+                  window.localStorage.setItem('roles.activeTenantId', value);
+                  resetForm();
+                }}
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none ring-primary/30 focus:ring disabled:bg-slate-100"
+                disabled={loadingTenants}
+              >
+                <option value="">
+                  {loadingTenants ? 'Memuat tenant...' : 'Pilih tenant untuk role'}
+                </option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name} ({tenant.slug})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end">
+              <p className="text-xs text-slate-500">
+                Role untuk tenant akan ditampilkan/diubah sesuai tenant yang dipilih.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <form
         onSubmit={onSubmit}

@@ -17,8 +17,10 @@ export type UpsertRolePayload = {
   permissions: RolePermissions;
 };
 
-export async function listRoles(): Promise<Role[]> {
-  const response = await httpClient.get('/roles');
+export async function listRoles(params?: { tenantId?: string }): Promise<Role[]> {
+  const response = await httpClient.get('/roles', {
+    params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
+  });
   const payload = response.data as { data?: unknown; items?: unknown };
 
   if (Array.isArray(payload.data)) {
@@ -32,12 +34,22 @@ export async function listRoles(): Promise<Role[]> {
   return [];
 }
 
-export async function createRole(payload: UpsertRolePayload): Promise<Role> {
-  const response = await httpClient.post('/roles', payload);
+export async function createRole(payload: UpsertRolePayload, params?: { tenantId?: string }): Promise<Role> {
+  const response = await httpClient.post('/roles', {
+    ...payload,
+    ...(params?.tenantId ? { tenantId: params.tenantId } : {}),
+  });
   return response.data.data as Role;
 }
 
-export async function updateRole(roleId: string, payload: UpsertRolePayload): Promise<Role> {
-  const response = await httpClient.put(`/roles/${encodeURIComponent(roleId)}`, payload);
+export async function updateRole(
+  roleId: string,
+  payload: UpsertRolePayload,
+  params?: { tenantId?: string }
+): Promise<Role> {
+  const response = await httpClient.put(`/roles/${encodeURIComponent(roleId)}`, {
+    ...payload,
+    ...(params?.tenantId ? { tenantId: params.tenantId } : {}),
+  });
   return response.data.data as Role;
 }

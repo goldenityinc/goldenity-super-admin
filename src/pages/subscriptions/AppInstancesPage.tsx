@@ -1182,7 +1182,13 @@ export default function AppInstancesPage() {
             const isExpanded = expandedTenantIds.includes(row.tenantId);
 
             return (
-              <div key={row.tenantId} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div
+                key={row.tenantId}
+                className={[
+                  'overflow-hidden rounded-xl border bg-white shadow-sm transition-colors',
+                  isExpanded ? 'border-primary/40 ring-2 ring-primary/15' : 'border-slate-200',
+                ].join(' ')}
+              >
                 <button
                   type="button"
                   onClick={() =>
@@ -1192,7 +1198,10 @@ export default function AppInstancesPage() {
                         : [...current, row.tenantId]
                     )
                   }
-                  className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-slate-50"
+                  className={[
+                    'flex w-full items-start justify-between gap-4 px-4 py-4 text-left transition-colors',
+                    isExpanded ? 'bg-primary/5' : 'hover:bg-slate-50',
+                  ].join(' ')}
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1241,7 +1250,7 @@ export default function AppInstancesPage() {
                 </button>
 
                 {isExpanded ? (
-                  <div className="border-t border-slate-200 bg-slate-50/50 p-4">
+                  <div className="border-t border-primary/20 bg-primary/5 p-4">
                     <div className="space-y-3">
                       {row.instances.map((instance) => {
                         const loginUrl = getSolutionLoginUrl(instance);
