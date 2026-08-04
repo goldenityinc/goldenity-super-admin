@@ -10,17 +10,33 @@ import {
   LogOut,
   Download,
   ClipboardList,
+  ChevronDown,
+  ChevronUp,
+  Wallet,
+  FileText,
+  CreditCard,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentType } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 
-type SidebarItem = {
+type SidebarSingleItem = {
+  type?: 'item';
   to: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
 };
+
+type SidebarGroupItem = {
+  type: 'group';
+  key: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  children: SidebarSingleItem[];
+};
+
+type SidebarItem = SidebarSingleItem | SidebarGroupItem;
 
 type SidebarSection = {
   title: string;
@@ -42,6 +58,21 @@ const menuSections: SidebarSection[] = [
     ],
   },
   {
+    title: 'Finance & Accounting',
+    items: [
+      {
+        type: 'group',
+        key: 'finance',
+        label: 'Finance',
+        icon: Wallet,
+        children: [
+          { to: '/dashboard/finance/expenses', label: 'Expenses', icon: FileText },
+          { to: '/dashboard/finance/client-payments', label: 'Client Payment', icon: CreditCard },
+        ],
+      },
+    ],
+  },
+  {
     title: 'Transactions / Sales',
     items: [{ to: '/dashboard/sales/pre-orders', label: 'Pre-Order', icon: ClipboardList }],
   },
@@ -49,9 +80,23 @@ const menuSections: SidebarSection[] = [
 
 export default function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const { user, logout } = useAuth();
+  const location = useLocation();
 
   const closeMobile = () => setMobileOpen(false);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background text-dark">
@@ -84,11 +129,66 @@ export default function AdminLayout() {
                 <p className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   {section.title}
                 </p>
-                {section.items.map((item) => {
+                {section.items.map((item, index) => {
+                  if (item.type === 'group') {
+                    const GroupIcon = item.icon;
+                    const isGroupExpanded = expandedGroups.has(item.key);
+                    const isGroupActive = item.children.some(
+                      (child) => location.pathname === child.to
+                    );
+                    return (
+                      <div key={item.key}>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(item.key)}
+                          className={[
+                            'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                            isGroupActive
+                              ? 'bg-primary/20 text-primary'
+                              : 'text-slate-200 hover:bg-slate-800 hover:text-white',
+                          ].join(' ')}
+                        >
+                          <GroupIcon className="h-4 w-4" />
+                          <span className="flex-1 text-left">{item.label}</span>
+                          {isGroupExpanded ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </button>
+                        {isGroupExpanded ? (
+                          <div className="mt-1 space-y-1 pl-7">
+                            {item.children.map((child) => {
+                              const ChildIcon = child.icon;
+                              return (
+                                <NavLink
+                                  key={child.to}
+                                  to={child.to}
+                                  end
+                                  onClick={closeMobile}
+                                  className={({ isActive }) =>
+                                    [
+                                      'flex items-center gap-3 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
+                                      isActive
+                                        ? 'bg-primary text-white'
+                                        : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                                    ].join(' ')
+                                  }
+                                >
+                                  <ChildIcon className="h-3.5 w-3.5" />
+                                  <span>{child.label}</span>
+                                </NavLink>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  }
                   const Icon = item.icon;
                   return (
                     <NavLink
-                      key={item.to}
+                      key={item.to ?? `item-${index}`}
                       to={item.to}
                       end={item.to === '/dashboard'}
                       onClick={closeMobile}

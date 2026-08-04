@@ -17,6 +17,8 @@ const DownloadsPage = lazy(() => import('../pages/downloads/DownloadsPage'));
 const PreOrdersPage = lazy(() => import('../pages/sales/PreOrdersPage'));
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const UnauthorizedPage = lazy(() => import('../pages/auth/UnauthorizedPage'));
+const ExpensesPage = lazy(() => import('../pages/finance/ExpensesPage'));
+const ClientPaymentsPage = lazy(() => import('../pages/finance/ClientPaymentsPage'));
 
 function RouteLoader() {
   return (
@@ -77,6 +79,8 @@ export default function AppRouter() {
         <Route path="settings" element={withSuspense(<SettingsPage />)} />
         <Route path="downloads" element={withSuspense(<DownloadsPage />)} />
         <Route path="sales/pre-orders" element={withSuspense(<PreOrdersPage />)} />
+        <Route path="finance/expenses" element={withSuspense(<ExpensesPage />)} />
+        <Route path="finance/client-payments" element={withSuspense(<ClientPaymentsPage />)} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />
