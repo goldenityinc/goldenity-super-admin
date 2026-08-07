@@ -118,7 +118,7 @@ export default function PreOrdersPage() {
 
   useEffect(() => {
     void fetchPreOrders(page, statusFilter);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [page, statusFilter]);
 
   const onViewDetails = async (item: PreOrder) => {
