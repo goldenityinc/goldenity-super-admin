@@ -101,27 +101,37 @@ function extractListItems(payload: unknown): unknown[] {
   return toArray(dataRecord.items ?? body.items ?? dataRecord.data);
 }
 
-export async function listExpenses(params?: { search?: string }): Promise<Expense[]> {
-  const response = await httpClient.get('/v1/expenses', { params });
+export async function listExpenses(params?: { search?: string; startDate?: string; endDate?: string; category?: string; status?: string; payment_status?: string; tenantId?: string }): Promise<Expense[]> {
+  const queryParams: any = {};
+  if (params?.search) queryParams.search = params.search;
+  if (params?.startDate) queryParams.startDate = params.startDate;
+  if (params?.endDate) queryParams.endDate = params.endDate;
+  if (params?.category) queryParams.category = params.category;
+  if (params?.status) queryParams.status = params.status;
+  if (params?.payment_status) queryParams.payment_status = params.payment_status;
+  if (params?.tenantId) queryParams.tenantId = params.tenantId;
+  const response = await httpClient.get('/v1/expenses', { params: queryParams });
   const items = extractListItems(response.data);
   return items.map(normalizeExpense);
 }
 
-export async function createExpense(fd: FormData): Promise<Expense> {
+export async function createExpense(fd: FormData, params?: { tenantId?: string }): Promise<Expense> {
   const response = await httpClient.post('/v1/expenses', fd, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
   });
   const body = toRecord(response.data);
   return normalizeExpense(body.data ?? body);
 }
 
-export async function updateExpense(id: string, fd: FormData): Promise<Expense> {
+export async function updateExpense(id: string, fd: FormData, params?: { tenantId?: string }): Promise<Expense> {
   const response = await httpClient.put(`/v1/expenses/${encodeURIComponent(id)}`, fd, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
   });
   const body = toRecord(response.data);
   return normalizeExpense(body.data ?? body);
@@ -129,12 +139,16 @@ export async function updateExpense(id: string, fd: FormData): Promise<Expense> 
 
 export async function togglePaymentStatus(
   id: string,
-  newStatus: ExpenseStatus
+  newStatus: ExpenseStatus,
+  params?: { tenantId?: string }
 ): Promise<Expense> {
   const response = await httpClient.patch(
     `/v1/expenses/${encodeURIComponent(id)}/payment-status`,
     {
       payment_status: mapToApiPaymentStatus(newStatus),
+    },
+    {
+      params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
     }
   );
   const body = toRecord(response.data);
