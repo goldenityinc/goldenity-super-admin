@@ -10,6 +10,7 @@ import {
   Receipt,
   Loader2,
   FileText,
+  Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Modal from '../../components/common/Modal';
@@ -27,11 +28,15 @@ import {
   getMatrix,
   upsertCell,
   matrixKey,
+  listClientsAndProducts,
   type Client,
   type Product,
   type CellPayment,
 } from '../../lib/api/clientPaymentsApi';
 import { resolveMediaUrl } from '../../lib/api/httpClient';
+import { listTenants, type Tenant } from '../../lib/api/tenantApi';
+import { useAuth } from '../../context/useAuth';
+import { getApiErrorMessage } from '../../lib/utils/apiError';
 
 type PaymentMatrix = Record<string, CellPayment>;
 
@@ -109,6 +114,7 @@ interface EditModalState {
 }
 
 export default function ClientPaymentsPage() {
+  const { isSuperAdmin } = useAuth();
   const [currentYear, setCurrentYear] = useState<number>(() => new Date().getFullYear());
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -121,6 +127,13 @@ export default function ClientPaymentsPage() {
     isOpen: false,
     clientId: null,
     monthIdx: null,
+  });
+
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [activeTenantId, setActiveTenantId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return window.localStorage.getItem('clientPayment.activeTenantId') ?? '';
   });
 
   const [formStatus, setFormStatus] = useState<'Paid' | 'Not Paid'>('Not Paid');
@@ -143,6 +156,34 @@ export default function ClientPaymentsPage() {
         : null,
     [editModal.clientId, clients]
   );
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    let isActive = true;
+    setLoadingTenants(true);
+    listTenants({ page: 1, limit: 100 })
+      .then((result) => {
+        if (!isActive) return;
+        setTenants(result.items ?? []);
+        if (!activeTenantId && (result.items ?? []).length > 0) {
+          const firstId = String((result.items ?? [])[0].id);
+          setActiveTenantId(firstId);
+          window.localStorage.setItem('clientPayment.activeTenantId', firstId);
+        }
+      })
+      .catch((e) => {
+        if (!isActive) return;
+        toast.error(`Gagal memuat daftar tenant: ${getApiErrorMessage(e)}`);
+      })
+      .finally(() => {
+        if (!isActive) return;
+        setLoadingTenants(false);
+      });
+    return () => {
+      isActive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdmin]);
 
   const editingCellKey = useMemo(() => {
     if (!editModal.clientId || editModal.monthIdx === null) return null;
@@ -183,14 +224,24 @@ export default function ClientPaymentsPage() {
   }, [matrix, currentYear]);
 
   async function loadAll(year: number, productId: string) {
+    if (isSuperAdmin && !activeTenantId) {
+      setIsLoading(false);
+      setClients([]);
+      setProducts([]);
+      setMatrix({});
+      setActiveProductId('');
+      return;
+    }
     setIsLoading(true);
     try {
       let finalClients: Client[] = [];
       let finalProducts: Product[] = [];
       let apiMatrix: PaymentMatrix = {};
 
+      const tenantParams = isSuperAdmin && activeTenantId ? { tenantId: activeTenantId } : undefined;
+
       try {
-        const firstMatrix = await getMatrix(year, productId || '');
+        const firstMatrix = await getMatrix(year, productId || '', tenantParams);
         apiMatrix = firstMatrix.matrix || {};
         const refs = firstMatrix.references || { clients: [], products: [] };
         if (refs.clients.length > 0 || refs.products.length > 0) {
@@ -201,6 +252,18 @@ export default function ClientPaymentsPage() {
       } catch (e) {
         if (import.meta.env.DEV) {
           console.warn('[ClientPaymentsPage] getMatrix references failed, using static seed fallback', e);
+        }
+      }
+
+      if (finalClients.length === 0 || finalProducts.length === 0) {
+        try {
+          const fetched = await listClientsAndProducts(tenantParams);
+          if (finalClients.length === 0) finalClients = fetched.clients || [];
+          if (finalProducts.length === 0) finalProducts = fetched.products || [];
+        } catch (e2) {
+          if (import.meta.env.DEV) {
+            console.warn('[ClientPaymentsPage] listClientsAndProducts fallback failed, using DEV-only seed', e2);
+          }
         }
       }
 
@@ -229,7 +292,7 @@ export default function ClientPaymentsPage() {
 
       if (Object.keys(apiMatrix || {}).length === 0 && productId && productId !== targetProductId) {
         try {
-          const res = await getMatrix(year, targetProductId);
+          const res = await getMatrix(year, targetProductId, tenantParams);
           apiMatrix = res.matrix || {};
         } catch {
           apiMatrix = {};
@@ -276,9 +339,11 @@ export default function ClientPaymentsPage() {
 
   async function loadMatrixOnly(year: number, productId: string) {
     if (!productId) return;
+    if (isSuperAdmin && !activeTenantId) return;
     setIsLoading(true);
     try {
-      const { matrix: apiMatrix } = await getMatrix(year, productId);
+      const tenantParams = isSuperAdmin && activeTenantId ? { tenantId: activeTenantId } : undefined;
+      const { matrix: apiMatrix } = await getMatrix(year, productId, tenantParams);
       setIsOffline(false);
       setMatrix((prev) => ({ ...(prev || {}), ...(apiMatrix || {}) }));
     } catch {
@@ -301,7 +366,7 @@ export default function ClientPaymentsPage() {
   useEffect(() => {
     loadAll(currentYear, '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentYear, activeTenantId]);
 
   useEffect(() => {
     if (products.length === 0 || !activeProductId) return;
@@ -482,6 +547,7 @@ export default function ClientPaymentsPage() {
         amountIDR: finalAmount,
         receiptImages: formReceipts,
         receiptFiles: [...receiptFilesRef.current],
+        ...(isSuperAdmin && activeTenantId ? { tenantId: activeTenantId } : {}),
       });
 
       const mergedReceipts = [...formReceipts].filter((r) => !r.startsWith('blob:'));
@@ -545,6 +611,42 @@ export default function ClientPaymentsPage() {
 
   return (
     <div className="space-y-5">
+      {isSuperAdmin ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                <Building2 className="h-4 w-4" /> Tenant *
+              </span>
+              <select
+                value={activeTenantId}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setActiveTenantId(value);
+                  window.localStorage.setItem('clientPayment.activeTenantId', value);
+                }}
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none ring-primary/30 focus:ring disabled:bg-slate-100"
+                disabled={loadingTenants}
+              >
+                <option value="">
+                  {loadingTenants ? 'Memuat tenant...' : 'Pilih tenant untuk melihat pembayaran client'}
+                </option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={String(tenant.id)}>
+                    {tenant.name} ({tenant.slug})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end">
+              <p className="text-xs text-slate-500">
+                Data pembayaran, client, dan produk akan ditampilkan untuk tenant yang dipilih.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-dark">
@@ -558,7 +660,6 @@ export default function ClientPaymentsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={handlePrevYear}
-            disabled={currentYear <= 2024}
             className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-2 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             aria-label="Tahun sebelumnya"
           >
@@ -571,7 +672,7 @@ export default function ClientPaymentsPage() {
               onChange={(e) => setCurrentYear(Number(e.target.value))}
               className="bg-transparent outline-none cursor-pointer"
             >
-              {[2024, 2025, 2026, 2027].map((y) => (
+              {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 3 + i).map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>
@@ -580,7 +681,6 @@ export default function ClientPaymentsPage() {
           </div>
           <button
             onClick={handleNextYear}
-            disabled={currentYear >= 2027}
             className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-2 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             aria-label="Tahun berikutnya"
           >

@@ -123,13 +123,14 @@ function normalizeProduct(value: unknown): Product {
   };
 }
 
-export async function listClientsAndProducts(): Promise<{
+export async function listClientsAndProducts(params?: { tenantId?: string }): Promise<{
   clients: Client[];
   products: Product[];
 }> {
+  const queryParams = params?.tenantId ? { tenantId: params.tenantId, limit: 200 } : { limit: 200 };
   const [productsResponse, clientsResponse] = await Promise.all([
-    httpClient.get('/v1/products', { params: { limit: 200 } }),
-    httpClient.get('/v1/sales/customers', { params: { limit: 200 } }),
+    httpClient.get('/v1/products', { params: queryParams }),
+    httpClient.get('/v1/sales/customers', { params: queryParams }),
   ]);
 
   const productItems = extractListItems(productsResponse.data);
@@ -143,15 +144,18 @@ export async function listClientsAndProducts(): Promise<{
 
 export async function getMatrix(
   year: number,
-  productId: string
+  productId: string,
+  params?: { tenantId?: string }
 ): Promise<{
   matrix: Record<string, CellPayment>;
   clients: string[];
   months: number[];
   references: { clients: Client[]; products: Product[] };
 }> {
+  const queryParams: any = { year, productId };
+  if (params?.tenantId) queryParams.tenantId = params.tenantId;
   const response = await httpClient.get('/v1/client-payments/matrix', {
-    params: { year, productId },
+    params: queryParams,
   });
   const body = toRecord(response.data);
   const data = toRecord(body.data ?? body);
@@ -225,6 +229,7 @@ type UpsertCellPayload = {
   receiptImages: string[];
   receiptFiles?: File[];
   notes?: string;
+  tenantId?: string;
 };
 
 export async function upsertCell(payload: UpsertCellPayload): Promise<CellPayment> {
@@ -237,6 +242,9 @@ export async function upsertCell(payload: UpsertCellPayload): Promise<CellPaymen
 
   let response;
 
+  const queryParams: Record<string, string> = {};
+  if (payload.tenantId) queryParams.tenantId = payload.tenantId;
+
   if (hasFiles) {
     const fd = new FormData();
     fd.append('client_id', payload.clientId);
@@ -246,6 +254,7 @@ export async function upsertCell(payload: UpsertCellPayload): Promise<CellPaymen
     fd.append('payment_status', mapToApiPaymentStatus(payload.status));
     fd.append('amount', String(payload.amountIDR));
     fd.append('receipt_images', JSON.stringify(remoteReceiptUrls));
+    if (payload.tenantId) fd.append('tenantId', payload.tenantId);
     if (payload.notes !== undefined && payload.notes !== null) {
       fd.append('notes', String(payload.notes));
     } else {
@@ -259,6 +268,7 @@ export async function upsertCell(payload: UpsertCellPayload): Promise<CellPaymen
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   } else {
     const body = {
@@ -270,8 +280,11 @@ export async function upsertCell(payload: UpsertCellPayload): Promise<CellPaymen
       amount: payload.amountIDR,
       receipt_images: remoteReceiptUrls,
       notes: payload.notes ?? null,
+      ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
     };
-    response = await httpClient.put('/v1/client-payments/cell', body);
+    response = await httpClient.put('/v1/client-payments/cell', body, {
+      params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
   }
 
   const respBody = toRecord(response.data);
