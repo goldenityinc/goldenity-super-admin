@@ -109,7 +109,7 @@ interface EditModalState {
 }
 
 export default function ClientPaymentsPage() {
-  const [currentYear, setCurrentYear] = useState(2026);
+  const [currentYear, setCurrentYear] = useState<number>(() => new Date().getFullYear());
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [activeProductId, setActiveProductId] = useState<string>('');
@@ -161,11 +161,23 @@ export default function ClientPaymentsPage() {
       if (!cell || cell.status !== 'Paid') continue;
       const parts = key.split(':');
       if (parts.length < 4) continue;
-      const productId = parts[1];
+      const productId = String(parts[1] || '').trim();
+      if (!productId) continue;
       const year = Number(parts[3]);
       if (!Number.isFinite(year) || year !== currentYear) continue;
       const amt = Number(cell.amountIDR || 0);
+      if (!Number.isFinite(amt) || amt <= 0) continue;
       acc[productId] = (acc[productId] || 0) + amt;
+    }
+    if (import.meta.env.DEV) {
+      const keys = Object.keys(matrix || {});
+      console.debug('[totalsByProduct] debug:', {
+        currentYear,
+        matrixKeys: keys.length,
+        keys: keys.slice(0, 5),
+        paidEntries: Object.values(matrix || {}).filter((c: any) => c?.status === 'Paid').length,
+        totals: acc,
+      });
     }
     return acc;
   }, [matrix, currentYear]);
@@ -185,23 +197,19 @@ export default function ClientPaymentsPage() {
           const adapted = adaptBackendClientsProducts(refs as any);
           finalClients = adapted.clients;
           finalProducts = adapted.products;
-          console.debug('[ClientPaymentsPage] using /matrix references:', {
-            clientsCount: finalClients.length,
-            productsCount: finalProducts.length,
-            clients: finalClients.slice(0, 3),
-            products: finalProducts.slice(0, 3),
-          });
         }
       } catch (e) {
-        console.warn('[ClientPaymentsPage] getMatrix references failed, using static seed fallback', e);
+        if (import.meta.env.DEV) {
+          console.warn('[ClientPaymentsPage] getMatrix references failed, using static seed fallback', e);
+        }
       }
 
-      if (finalClients.length === 0) {
+      if (finalClients.length === 0 && import.meta.env.DEV) {
         finalClients = SEED_TENANT_CLIENTS.length > 0
           ? SEED_TENANT_CLIENTS.map(adaptDemoClient)
           : SEED_CLIENTS.map(adaptDemoClient);
       }
-      if (finalProducts.length === 0) {
+      if (finalProducts.length === 0 && import.meta.env.DEV) {
         finalProducts = SEED_LICENSE_PRODUCTS.length > 0
           ? SEED_LICENSE_PRODUCTS.map(adaptDemoProduct)
           : SEED_PRODUCTS.map(adaptDemoProduct);
@@ -210,14 +218,14 @@ export default function ClientPaymentsPage() {
       setClients(finalClients);
       setProducts(finalProducts);
       if (!finalProducts.find((p) => p.id === productId)) {
-        setActiveProductId(finalProducts[0].id);
+        setActiveProductId(finalProducts[0]?.id ?? '');
       } else {
         setActiveProductId(productId);
       }
 
       const targetProductId = finalProducts.find((p) => p.id === productId)
         ? productId
-        : finalProducts[0].id;
+        : (finalProducts[0]?.id ?? productId);
 
       if (Object.keys(apiMatrix || {}).length === 0 && productId && productId !== targetProductId) {
         try {
@@ -228,28 +236,39 @@ export default function ClientPaymentsPage() {
         }
       }
 
-      setIsOffline(Object.keys(apiMatrix || {}).length === 0);
+      setIsOffline(Object.keys(apiMatrix || {}).length === 0 && import.meta.env.DEV);
       if (Object.keys(apiMatrix || {}).length > 0) {
         setMatrix((prev) => ({ ...(prev || {}), ...apiMatrix }));
-      } else {
+      } else if (import.meta.env.DEV && finalClients.length > 0 && finalProducts.length > 0) {
         const seed = generateSeedMatrix(finalClients, finalProducts, year);
         setMatrix((prev) => ({ ...(prev || {}), ...seed }));
+      } else {
+        setMatrix((prev) => ({ ...(prev || {}) }));
       }
     } catch {
-      toast.warning(
-        'Gagal ambil data dari server, pakai data demo offline'
-      );
-      const fallbackClients = SEED_TENANT_CLIENTS.length > 0
-        ? SEED_TENANT_CLIENTS.map(adaptDemoClient)
-        : SEED_CLIENTS.map(adaptDemoClient);
-      const fallbackProducts = SEED_LICENSE_PRODUCTS.length > 0
-        ? SEED_LICENSE_PRODUCTS.map(adaptDemoProduct)
-        : SEED_PRODUCTS.map(adaptDemoProduct);
-      setClients(fallbackClients);
-      setProducts(fallbackProducts);
-      setActiveProductId(fallbackProducts[0].id);
-      setMatrix(generateSeedMatrix(fallbackClients, fallbackProducts, year));
-      setIsOffline(true);
+      if (import.meta.env.DEV) {
+        toast.warning(
+          'Gagal ambil data dari server, pakai data demo offline'
+        );
+        const fallbackClients = SEED_TENANT_CLIENTS.length > 0
+          ? SEED_TENANT_CLIENTS.map(adaptDemoClient)
+          : SEED_CLIENTS.map(adaptDemoClient);
+        const fallbackProducts = SEED_LICENSE_PRODUCTS.length > 0
+          ? SEED_LICENSE_PRODUCTS.map(adaptDemoProduct)
+          : SEED_PRODUCTS.map(adaptDemoProduct);
+        setClients(fallbackClients);
+        setProducts(fallbackProducts);
+        setActiveProductId(fallbackProducts[0]?.id ?? '');
+        setMatrix(generateSeedMatrix(fallbackClients, fallbackProducts, year));
+        setIsOffline(true);
+      } else {
+        setClients([]);
+        setProducts([]);
+        setActiveProductId('');
+        setMatrix({});
+        setIsOffline(false);
+        toast.error('Gagal memuat data pembayaran client, hubungi admin.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -263,19 +282,25 @@ export default function ClientPaymentsPage() {
       setIsOffline(false);
       setMatrix((prev) => ({ ...(prev || {}), ...(apiMatrix || {}) }));
     } catch {
-      toast.warning(
-        'Gagal ambil data dari server, pakai data demo offline'
-      );
-      const seed = generateSeedMatrix(clients, products, year);
-      setMatrix((prev) => ({ ...(prev || {}), ...seed }));
-      setIsOffline(true);
+      if (import.meta.env.DEV) {
+        toast.warning(
+          'Gagal ambil data dari server, pakai data demo offline'
+        );
+        const seed = generateSeedMatrix(clients, products, year);
+        setMatrix((prev) => ({ ...(prev || {}), ...seed }));
+        setIsOffline(true);
+      } else {
+        setIsOffline(false);
+        toast.error('Gagal memuat data matrix tahun ini, hubungi admin.');
+      }
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    loadAll(2026, '');
+    loadAll(currentYear, '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -285,11 +310,11 @@ export default function ClientPaymentsPage() {
   }, [currentYear, activeProductId]);
 
   function handlePrevYear() {
-    if (currentYear > 2024) setCurrentYear((y) => y - 1);
+    setCurrentYear((y) => y - 1);
   }
 
   function handleNextYear() {
-    if (currentYear < 2027) setCurrentYear((y) => y + 1);
+    setCurrentYear((y) => y + 1);
   }
 
   function openEditModal(clientId: string, monthIdx: number) {

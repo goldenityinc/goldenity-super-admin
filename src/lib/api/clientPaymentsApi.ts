@@ -175,6 +175,29 @@ export async function getMatrix(
     };
   }
 
+  const flatRecords = toArray(data);
+  if (flatRecords.length > 0 && Object.keys(matrix).length === 0) {
+    for (const item of flatRecords) {
+      const row = toRecord(item);
+      const rawStatus = row.status ?? row.payment_status;
+      const clientId = toStringValue(row.client_id ?? row.clientId ?? row.customer_id ?? row.customerId);
+      const productId = toStringValue(row.product_id ?? row.productId ?? row.item_id ?? row.itemId);
+      const periodMonth = toNumberValue(row.period_month ?? row.periodMonth ?? row.month, 0);
+      const periodYear = toNumberValue(row.period_year ?? row.periodYear ?? row.year, 0);
+      if (!clientId || !productId || periodMonth <= 0 || periodYear <= 0) continue;
+      const key = matrixKey({ clientId, productId, periodMonth, periodYear });
+      if (matrix[key]) continue;
+      matrix[key] = {
+        status: normalizePaymentStatus(rawStatus),
+        amountIDR: toNumberValue(row.amountIDR ?? row.amount ?? row.amount_idr ?? row.total, 0),
+        receiptImages: normalizeReceiptImages(
+          row.receiptImages ?? row.receipt_images ?? row.receipts ?? row.attachments ?? row.files ?? row.images
+        ),
+        notes: toStringValue(row.notes ?? row.note ?? row.description, '') || undefined,
+      };
+    }
+  }
+
   const clients = toArray(data.clients ?? data.clientIds ?? data.customerIds).map((c) => toStringValue(c));
   const months = toArray(data.months ?? data.periodMonths).map((m) => toNumberValue(m, 0)).filter((m) => m > 0);
 

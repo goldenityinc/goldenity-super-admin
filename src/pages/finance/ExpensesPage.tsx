@@ -224,10 +224,16 @@ export default function ExpensesPage() {
         setIsOfflineMode(false);
       } catch {
         if (cancelled) return;
-        toast.warning('Gagal ambil data dari server, pakai data demo offline');
-        const adapted = SEED_EXPENSES.map(adaptSeedExpense);
-        setExpenses(adapted);
-        setIsOfflineMode(true);
+        if (import.meta.env.DEV) {
+          toast.warning('Gagal ambil data dari server, pakai data demo offline');
+          const adapted = SEED_EXPENSES.map(adaptSeedExpense);
+          setExpenses(adapted);
+          setIsOfflineMode(true);
+        } else {
+          setExpenses([]);
+          setIsOfflineMode(false);
+          toast.error('Gagal memuat data pengeluaran, hubungi admin.');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -247,7 +253,6 @@ export default function ExpensesPage() {
       const year = new Date(e.dateISO).getFullYear();
       return Number.isFinite(year) && year === selectedYear;
     });
-
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -686,56 +691,59 @@ export default function ExpensesPage() {
                 </span>
               </p>
             </div>
-            <div className="w-full" style={{ height: 340 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={monthSummary}
-                  margin={{ top: 20, right: 20, left: 10, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 11, fill: '#64748b' }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: '#64748b' }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={false}
-                    tickFormatter={(v) => {
-                      const n = Number(v) || 0;
-                      if (n === 0) return '0';
-                      if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(0)}M`;
-                      if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}Jt`;
-                      if (n >= 1_000) return `${(n / 1_000).toFixed(0)}Rb`;
-                      return String(n);
-                    }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(59,130,246,0.05)' }}
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: '1px solid #e2e8f0',
-                      boxShadow: '0 8px 30px rgba(15,23,42,0.08)',
-                      fontSize: 12,
-                      padding: '10px 12px',
-                    }}
-                    formatter={(value: unknown) => {
-                      const n = Number(value) || 0;
-                      return formatCurrencyIDR(n);
-                    }}
-                    labelFormatter={(label: unknown) => `Bulan ${label}`}
-                  />
-                  <Bar
-                    dataKey="total"
-                    radius={[8, 8, 0, 0]}
-                    fill="#2563eb"
-                    barSize={36}
-                    activeBar={{ fill: '#1d4ed8' }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="w-full overflow-x-auto" style={{ minWidth: '100%' }}>
+              <div style={{ width: '100%', minWidth: 420, height: 340 }}>
+                <ResponsiveContainer width="100%" height={340}>
+                  <BarChart
+                    data={monthSummary}
+                    margin={{ top: 20, right: 24, left: 8, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      axisLine={{ stroke: '#cbd5e1' }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      axisLine={{ stroke: '#cbd5e1' }}
+                      tickLine={false}
+                      allowDecimals={false}
+                      tickFormatter={(v) => {
+                        const n = Number(v) || 0;
+                        if (n === 0) return '0';
+                        if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(0)}M`;
+                        if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}Jt`;
+                        if (n >= 1_000) return `${(n / 1_000).toFixed(0)}Rb`;
+                        return String(n);
+                      }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(59,130,246,0.05)' }}
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 8px 30px rgba(15,23,42,0.08)',
+                        fontSize: 12,
+                        padding: '10px 12px',
+                      }}
+                      formatter={(value: unknown) => {
+                        const n = Number(value) || 0;
+                        return formatCurrencyIDR(n);
+                      }}
+                      labelFormatter={(label: unknown) => `Bulan ${label}`}
+                    />
+                    <Bar
+                      dataKey="total"
+                      radius={[8, 8, 0, 0]}
+                      fill="#2563eb"
+                      barSize={36}
+                      activeBar={{ fill: '#1d4ed8' }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </section>
 
