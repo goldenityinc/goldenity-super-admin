@@ -91,16 +91,6 @@ function normalizeReceiptImages(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function extractListItems(payload: unknown): unknown[] {
-  const body = toRecord(payload);
-  const dataNode = body.data;
-  if (Array.isArray(dataNode)) {
-    return dataNode;
-  }
-  const dataRecord = toRecord(dataNode);
-  return toArray(dataRecord.items ?? body.items ?? dataRecord.data);
-}
-
 function normalizeClient(value: unknown): Client {
   const row = toRecord(value);
   return {

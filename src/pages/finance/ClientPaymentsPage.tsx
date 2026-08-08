@@ -33,10 +33,9 @@ import {
   type CellPayment,
 } from '../../lib/api/clientPaymentsApi';
 import { resolveMediaUrl } from '../../lib/api/httpClient';
-import { listTenants, type Tenant } from '../../lib/api/tenantApi';
+import { listTenants } from '../../lib/api/tenantApi';
 import { listSolutions } from '../../lib/api/solutionApi';
 import { useAuth } from '../../context/useAuth';
-import { getApiErrorMessage } from '../../lib/utils/apiError';
 
 type PaymentMatrix = Record<string, CellPayment>;
 
@@ -131,9 +130,6 @@ export default function ClientPaymentsPage() {
     monthIdx: null,
   });
 
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loadingTenants, setLoadingTenants] = useState(false);
-
   const [formStatus, setFormStatus] = useState<'Paid' | 'Not Paid'>('Not Paid');
   const [formAmount, setFormAmount] = useState<number>(0);
   const [displayAmount, setDisplayAmount] = useState<string>('0');
@@ -154,29 +150,6 @@ export default function ClientPaymentsPage() {
         : null,
     [editModal.clientId, clients]
   );
-
-  useEffect(() => {
-    if (!isSuperAdmin) return;
-    let isActive = true;
-    setLoadingTenants(true);
-    listTenants({ page: 1, limit: 100 })
-      .then((result) => {
-        if (!isActive) return;
-        setTenants(result.items ?? []);
-      })
-      .catch((e) => {
-        if (!isActive) return;
-        toast.error(`Gagal memuat daftar tenant: ${getApiErrorMessage(e)}`);
-      })
-      .finally(() => {
-        if (!isActive) return;
-        setLoadingTenants(false);
-      });
-    return () => {
-      isActive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSuperAdmin]);
 
   const editingCellKey = useMemo(() => {
     if (!editModal.clientId || editModal.monthIdx === null) return null;
