@@ -35,6 +35,7 @@ import {
 } from '../../lib/api/clientPaymentsApi';
 import { resolveMediaUrl } from '../../lib/api/httpClient';
 import { listTenants, type Tenant } from '../../lib/api/tenantApi';
+import { listSolutions } from '../../lib/api/solutionApi';
 import { useAuth } from '../../context/useAuth';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
 
@@ -94,13 +95,13 @@ function adaptBackendClientsProducts<T extends { id: any; name: any; price?: any
   raw: { clients: T[]; products: T[] }
 ): { clients: Client[]; products: Product[] } {
   const clients: Client[] = (raw.clients || []).map((c) => ({
-    id: String((c as any).code ?? c.id ?? ''),
+    id: String(c.id ?? ''),
     name: String(c.name ?? ''),
     email: String((c as any).email ?? ''),
     phone: String(c.phone ?? ''),
   }));
   const products: Product[] = (raw.products || []).map((p) => ({
-    id: String((p as any).code ?? p.id ?? ''),
+    id: String(p.id ?? ''),
     name: String(p.name ?? ''),
     defaultPrice: Number(p.price ?? p.defaultPrice ?? 0),
   }));
@@ -264,6 +265,32 @@ export default function ClientPaymentsPage() {
           if (import.meta.env.DEV) {
             console.warn('[ClientPaymentsPage] listClientsAndProducts fallback failed, using DEV-only seed', e2);
           }
+        }
+      }
+
+      if (isSuperAdmin && (finalClients.length === 0 || finalProducts.length === 0)) {
+        try {
+          const [tenantsRes, solutionsRes] = await Promise.all([
+            listTenants({ page: 1, limit: 200 }),
+            listSolutions({ page: 1, limit: 200, isActive: true }),
+          ]);
+          if (finalClients.length === 0) {
+            finalClients = (tenantsRes.items ?? []).map((t) => ({
+              id: String(t.id),
+              name: t.name,
+              email: t.email ?? '',
+              phone: t.phone ?? '',
+            }));
+          }
+          if (finalProducts.length === 0) {
+            finalProducts = (solutionsRes.items ?? []).map((s) => ({
+              id: String(s.id),
+              name: s.name,
+              defaultPrice: 0,
+            }));
+          }
+        } catch {
+          /* noop */
         }
       }
 

@@ -127,19 +127,16 @@ export async function listClientsAndProducts(params?: { tenantId?: string }): Pr
   clients: Client[];
   products: Product[];
 }> {
-  const queryParams = params?.tenantId ? { tenantId: params.tenantId, limit: 200 } : { limit: 200 };
-  const [productsResponse, clientsResponse] = await Promise.all([
-    httpClient.get('/v1/products', { params: queryParams }),
-    httpClient.get('/v1/sales/customers', { params: queryParams }),
-  ]);
+  const queryParams: any = {};
+  if (params?.tenantId) queryParams.tenantId = params.tenantId;
 
-  const productItems = extractListItems(productsResponse.data);
-  const clientItems = extractListItems(clientsResponse.data);
+  const response = await httpClient.get('/v1/client-payments/references', { params: queryParams });
+  const body = toRecord(response.data);
+  const data = toRecord(body.data ?? body);
+  const clients = toArray(data.clients ?? []).map(normalizeClient);
+  const products = toArray(data.products ?? []).map(normalizeProduct);
 
-  return {
-    clients: clientItems.map(normalizeClient),
-    products: productItems.map(normalizeProduct),
-  };
+  return { clients, products };
 }
 
 export async function getMatrix(
