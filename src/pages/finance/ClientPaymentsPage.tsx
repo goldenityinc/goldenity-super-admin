@@ -10,7 +10,6 @@ import {
   Receipt,
   Loader2,
   FileText,
-  Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Modal from '../../components/common/Modal';
@@ -108,6 +107,8 @@ function adaptBackendClientsProducts<T extends { id: any; name: any; price?: any
   return { clients, products };
 }
 
+const GLOBAL_FINANCE_MATRIX_TENANT_ID = 'SUPER_ADMIN_GLOBAL_FINANCE_MATRIX';
+
 interface EditModalState {
   isOpen: boolean;
   clientId: string | null;
@@ -132,10 +133,6 @@ export default function ClientPaymentsPage() {
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
-  const [activeTenantId, setActiveTenantId] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    return window.localStorage.getItem('clientPayment.activeTenantId') ?? '';
-  });
 
   const [formStatus, setFormStatus] = useState<'Paid' | 'Not Paid'>('Not Paid');
   const [formAmount, setFormAmount] = useState<number>(0);
@@ -166,11 +163,6 @@ export default function ClientPaymentsPage() {
       .then((result) => {
         if (!isActive) return;
         setTenants(result.items ?? []);
-        if (!activeTenantId && (result.items ?? []).length > 0) {
-          const firstId = String((result.items ?? [])[0].id);
-          setActiveTenantId(firstId);
-          window.localStorage.setItem('clientPayment.activeTenantId', firstId);
-        }
       })
       .catch((e) => {
         if (!isActive) return;
@@ -225,21 +217,13 @@ export default function ClientPaymentsPage() {
   }, [matrix, currentYear]);
 
   async function loadAll(year: number, productId: string) {
-    if (isSuperAdmin && !activeTenantId) {
-      setIsLoading(false);
-      setClients([]);
-      setProducts([]);
-      setMatrix({});
-      setActiveProductId('');
-      return;
-    }
     setIsLoading(true);
     try {
       let finalClients: Client[] = [];
       let finalProducts: Product[] = [];
       let apiMatrix: PaymentMatrix = {};
 
-      const tenantParams = isSuperAdmin && activeTenantId ? { tenantId: activeTenantId } : undefined;
+      const tenantParams = isSuperAdmin ? { tenantId: GLOBAL_FINANCE_MATRIX_TENANT_ID } : undefined;
 
       try {
         const firstMatrix = await getMatrix(year, productId || '', tenantParams);
@@ -366,10 +350,9 @@ export default function ClientPaymentsPage() {
 
   async function loadMatrixOnly(year: number, productId: string) {
     if (!productId) return;
-    if (isSuperAdmin && !activeTenantId) return;
     setIsLoading(true);
     try {
-      const tenantParams = isSuperAdmin && activeTenantId ? { tenantId: activeTenantId } : undefined;
+      const tenantParams = isSuperAdmin ? { tenantId: GLOBAL_FINANCE_MATRIX_TENANT_ID } : undefined;
       const { matrix: apiMatrix } = await getMatrix(year, productId, tenantParams);
       setIsOffline(false);
       setMatrix((prev) => ({ ...(prev || {}), ...(apiMatrix || {}) }));
@@ -393,7 +376,7 @@ export default function ClientPaymentsPage() {
   useEffect(() => {
     loadAll(currentYear, '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentYear, activeTenantId]);
+  }, [currentYear]);
 
   useEffect(() => {
     if (products.length === 0 || !activeProductId) return;
@@ -574,7 +557,7 @@ export default function ClientPaymentsPage() {
         amountIDR: finalAmount,
         receiptImages: formReceipts,
         receiptFiles: [...receiptFilesRef.current],
-        ...(isSuperAdmin && activeTenantId ? { tenantId: activeTenantId } : {}),
+        ...(isSuperAdmin ? { tenantId: GLOBAL_FINANCE_MATRIX_TENANT_ID } : {}),
       });
 
       const mergedReceipts = [...formReceipts].filter((r) => !r.startsWith('blob:'));
@@ -638,42 +621,6 @@ export default function ClientPaymentsPage() {
 
   return (
     <div className="space-y-5">
-      {isSuperAdmin ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                <Building2 className="h-4 w-4" /> Tenant *
-              </span>
-              <select
-                value={activeTenantId}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setActiveTenantId(value);
-                  window.localStorage.setItem('clientPayment.activeTenantId', value);
-                }}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none ring-primary/30 focus:ring disabled:bg-slate-100"
-                disabled={loadingTenants}
-              >
-                <option value="">
-                  {loadingTenants ? 'Memuat tenant...' : 'Pilih tenant untuk melihat pembayaran client'}
-                </option>
-                {tenants.map((tenant) => (
-                  <option key={tenant.id} value={String(tenant.id)}>
-                    {tenant.name} ({tenant.slug})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex items-end">
-              <p className="text-xs text-slate-500">
-                Data pembayaran, client, dan produk akan ditampilkan untuk tenant yang dipilih.
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-dark">
