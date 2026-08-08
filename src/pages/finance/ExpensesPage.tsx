@@ -19,7 +19,6 @@ import {
   Loader2,
   Tag,
   Banknote,
-  Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import DataTable from '../../components/common/DataTable';
@@ -40,8 +39,6 @@ import {
   type ExpenseStatus,
 } from '../../lib/api/expenseApi';
 import { resolveMediaUrl } from '../../lib/api/httpClient';
-import { listTenants, type Tenant } from '../../lib/api/tenantApi';
-import { useAuth } from '../../context/useAuth';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
 import {
   ResponsiveContainer,
@@ -151,7 +148,6 @@ function sanitizeAmountInput(raw: string): string {
 }
 
 export default function ExpensesPage() {
-  const { isSuperAdmin } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
@@ -173,43 +169,6 @@ export default function ExpensesPage() {
   const [brokenFormImages, setBrokenFormImages] = useState<Set<number>>(new Set());
   const [brokenViewImages, setBrokenViewImages] = useState<Set<number>>(new Set());
   const [brokenAttachImages, setBrokenAttachImages] = useState<Set<number>>(new Set());
-
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loadingTenants, setLoadingTenants] = useState(false);
-  const [activeTenantId, setActiveTenantId] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    return window.localStorage.getItem('expenses.activeTenantId') ?? '';
-  });
-
-  const tenantParams = isSuperAdmin && activeTenantId ? { tenantId: activeTenantId } : undefined;
-
-  useEffect(() => {
-    if (!isSuperAdmin) return;
-    let isActive = true;
-    setLoadingTenants(true);
-    listTenants({ page: 1, limit: 100 })
-      .then((result) => {
-        if (!isActive) return;
-        setTenants(result.items ?? []);
-        if (!activeTenantId && (result.items ?? []).length > 0) {
-          const firstId = String((result.items ?? [])[0].id);
-          setActiveTenantId(firstId);
-          window.localStorage.setItem('expenses.activeTenantId', firstId);
-        }
-      })
-      .catch((e) => {
-        if (!isActive) return;
-        toast.error(`Gagal memuat daftar tenant: ${getApiErrorMessage(e)}`);
-      })
-      .finally(() => {
-        if (!isActive) return;
-        setLoadingTenants(false);
-      });
-    return () => {
-      isActive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSuperAdmin]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const proofFilesRef = useRef<File[]>([]);
@@ -258,15 +217,9 @@ export default function ExpensesPage() {
     let cancelled = false;
 
     async function load() {
-      if (isSuperAdmin && !activeTenantId) {
-        setExpenses([]);
-        setLoading(false);
-        setIsOfflineMode(false);
-        return;
-      }
       try {
         setLoading(true);
-        const data = await listExpenses(tenantParams);
+        const data = await listExpenses();
         if (cancelled) return;
         setExpenses(data);
         setIsOfflineMode(false);
@@ -291,7 +244,7 @@ export default function ExpensesPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedYear, activeTenantId, isSuperAdmin]);
+  }, [selectedYear]);
 
   const filteredSorted = useMemo(() => {
     let result = [...expenses];
@@ -448,7 +401,7 @@ export default function ExpensesPage() {
     }
 
     try {
-      const updated = await togglePaymentStatus(id, newStatus, tenantParams);
+      const updated = await togglePaymentStatus(id, newStatus);
       setExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
       toast.success('Status diperbarui');
     } catch (err: unknown) {
@@ -502,11 +455,6 @@ export default function ExpensesPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-
-    if (isSuperAdmin && !activeTenantId) {
-      toast.error('Pilih tenant terlebih dahulu sebelum menyimpan pengeluaran');
-      return;
-    }
 
     if (!form.name.trim()) {
       toast.error('Nama Pengeluaran tidak boleh kosong');
@@ -584,7 +532,6 @@ export default function ExpensesPage() {
       fd.append('pic_name', form.picName.trim());
       fd.append('notes', form.description.trim());
       fd.append('status', 'ACTIVE');
-      if (tenantParams?.tenantId) fd.append('tenantId', tenantParams.tenantId);
       if (existingRemoteUrls.length > 0) {
         fd.append('attachments', JSON.stringify(existingRemoteUrls));
       }
@@ -593,11 +540,11 @@ export default function ExpensesPage() {
       });
 
       if (modalMode === 'create') {
-        const created = await createExpense(fd, tenantParams);
+        const created = await createExpense(fd);
         setExpenses((prev) => [created, ...prev]);
         toast.success('Pengeluaran berhasil ditambahkan.');
       } else if (modalMode === 'edit' && editingId) {
-        const updated = await updateExpense(editingId, fd, tenantParams);
+        const updated = await updateExpense(editingId, fd);
         setExpenses((prev) => prev.map((e) => (e.id === editingId ? updated : e)));
         toast.success('Pengeluaran berhasil diperbarui.');
       }
@@ -618,42 +565,6 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6">
-      {isSuperAdmin ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                <Building2 className="h-4 w-4" /> Tenant *
-              </span>
-              <select
-                value={activeTenantId}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setActiveTenantId(value);
-                  window.localStorage.setItem('expenses.activeTenantId', value);
-                }}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 outline-none ring-primary/30 focus:ring disabled:bg-slate-100"
-                disabled={loadingTenants}
-              >
-                <option value="">
-                  {loadingTenants ? 'Memuat tenant...' : 'Pilih tenant untuk pengeluaran'}
-                </option>
-                {tenants.map((tenant) => (
-                  <option key={tenant.id} value={String(tenant.id)}>
-                    {tenant.name} ({tenant.slug})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex items-end">
-              <p className="text-xs text-slate-500">
-                Pengeluaran, chart, dan daftar bukti akan ditampilkan untuk tenant yang dipilih.
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">
@@ -672,13 +583,7 @@ export default function ExpensesPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => {
-              if (isSuperAdmin && !activeTenantId) {
-                toast.error('Pilih tenant terlebih dahulu sebelum menambah pengeluaran');
-                return;
-              }
-              openCreateModal();
-            }}
+            onClick={openCreateModal}
             className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm text-white hover:opacity-90"
           >
             <Plus className="mr-2 h-4 w-4" />
