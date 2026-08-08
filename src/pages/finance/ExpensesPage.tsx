@@ -26,8 +26,6 @@ import Modal from '../../components/common/Modal';
 import {
   formatDateID,
   formatCurrencyIDR,
-  genId,
-  SEED_EXPENSES,
   MONTH_LABELS_ID,
 } from '../../lib/finance-demo';
 import {
@@ -66,58 +64,6 @@ const CATEGORY_OPTIONS = [
 
 type ExpenseCategory = (typeof CATEGORY_OPTIONS)[number];
 
-const SEED_CATEGORY_MAP: Record<string, ExpenseCategory> = {
-  'Gaji Karyawan': 'Gaji & THR',
-  'Bonus THR': 'Gaji & THR',
-  'Sewa Kantor': 'Sewa Ruang',
-  'Listrik': 'Utilitas (Listrik/Internet)',
-  'Internet': 'Utilitas (Listrik/Internet)',
-  'ATK': 'ATK & Perlengkapan',
-  'Biaya Perbaikan': 'Maintenance',
-  'Service': 'Maintenance',
-  'Konsumsi': 'Operasional',
-  'Langganan': 'Operasional',
-  'Transportasi': 'Transport & Logistik',
-  'Reimburse': 'Transport & Logistik',
-};
-
-const SEED_AMOUNT_MAP: Record<string, number> = {
-  'Gaji Karyawan Januari 2026': 45000000,
-  'Sewa Kantor': 12000000,
-  'Listrik PLN': 2850000,
-  'Internet IndiHome': 899000,
-  'ATK Kantor': 1250000,
-  'Biaya Perbaikan AC': 950000,
-  'Konsumsi Rapat': 750000,
-  'Langganan Software': 8400000,
-  'Transportasi Dinas': 3200000,
-  'Bonus THR Lebaran': 60000000,
-};
-
-function adaptSeedExpense(seed: {
-  id: string;
-  name: string;
-  dateISO: string;
-  picName: string;
-  status: ExpenseStatus;
-  description: string;
-  proofImages: string[];
-}): Expense {
-  let category: ExpenseCategory = 'Lainnya';
-  for (const [key, cat] of Object.entries(SEED_CATEGORY_MAP)) {
-    if (seed.name.includes(key)) {
-      category = cat;
-      break;
-    }
-  }
-  const amountIDR = SEED_AMOUNT_MAP[seed.name] ?? 500000;
-  return {
-    ...seed,
-    category,
-    amountIDR,
-  };
-}
-
 type ExpenseFormState = {
   name: string;
   dateISO: string;
@@ -150,7 +96,6 @@ function sanitizeAmountInput(raw: string): string {
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortOption>('date_desc');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -222,18 +167,17 @@ export default function ExpensesPage() {
         const data = await listExpenses();
         if (cancelled) return;
         setExpenses(data);
-        setIsOfflineMode(false);
-      } catch {
+      } catch (err: unknown) {
         if (cancelled) return;
+        setExpenses([]);
         if (import.meta.env.DEV) {
-          toast.warning('Gagal ambil data dari server, pakai data demo offline');
-          const adapted = SEED_EXPENSES.map(adaptSeedExpense);
-          setExpenses(adapted);
-          setIsOfflineMode(true);
+          toast.warning(
+            `Gagal ambil data pengeluaran dari server: ${getApiErrorMessage(err)}`
+          );
         } else {
-          setExpenses([]);
-          setIsOfflineMode(false);
-          toast.error('Gagal memuat data pengeluaran, hubungi admin.');
+          toast.error(
+            `Gagal memuat data pengeluaran: ${getApiErrorMessage(err)}`
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -392,14 +336,6 @@ export default function ExpensesPage() {
     if (!target) return;
     const newStatus: ExpenseStatus = target.status === 'Paid' ? 'Not Paid' : 'Paid';
 
-    if (isOfflineMode) {
-      setExpenses((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, status: newStatus } : e))
-      );
-      toast.success('Status diperbarui');
-      return;
-    }
-
     try {
       const updated = await togglePaymentStatus(id, newStatus);
       setExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
@@ -486,44 +422,6 @@ export default function ExpensesPage() {
       );
       const newFiles = proofFilesRef.current;
 
-      if (isOfflineMode) {
-        if (modalMode === 'create') {
-          const newExpense: Expense = {
-            id: genId('EXP'),
-            name: form.name.trim(),
-            dateISO: form.dateISO,
-            picName: form.picName.trim(),
-            status: 'Not Paid',
-            description: form.description.trim(),
-            proofImages: [...form.proofImages],
-            category: form.category,
-            amountIDR: form.amountIDR,
-          };
-          setExpenses((prev) => [newExpense, ...prev]);
-          toast.success('Pengeluaran berhasil ditambahkan.');
-        } else if (modalMode === 'edit' && editingId) {
-          setExpenses((prev) =>
-            prev.map((e) =>
-              e.id === editingId
-                ? {
-                    ...e,
-                    name: form.name.trim(),
-                    dateISO: form.dateISO,
-                    picName: form.picName.trim(),
-                    description: form.description.trim(),
-                    proofImages: [...form.proofImages],
-                    category: form.category,
-                    amountIDR: form.amountIDR,
-                  }
-                : e
-            )
-          );
-          toast.success('Pengeluaran berhasil diperbarui.');
-        }
-        closeModal();
-        return;
-      }
-
       const fd = new FormData();
       fd.append('title', form.name.trim());
       fd.append('category', form.category);
@@ -574,11 +472,6 @@ export default function ExpensesPage() {
             Kelola daftar pengeluaran operasional, status pembayaran, dan arsip
             bukti transaksi.
           </p>
-          {isOfflineMode ? (
-            <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-              Mode Offline · Data Demo Lokal
-            </p>
-          ) : null}
         </div>
         <div className="flex items-center gap-3">
           <button
