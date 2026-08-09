@@ -189,7 +189,7 @@ export default function ClientPaymentsPage() {
     return acc;
   }, [matrix, currentYear]);
 
-  async function loadAll(year: number, productId: string) {
+  async function loadAll(year: number) {
     setIsLoading(true);
     try {
       let finalClients: Client[] = [];
@@ -199,7 +199,7 @@ export default function ClientPaymentsPage() {
       const tenantParams = isSuperAdmin ? { tenantId: GLOBAL_FINANCE_MATRIX_TENANT_ID } : undefined;
 
       try {
-        const firstMatrix = await getMatrix(year, productId || '', tenantParams);
+        const firstMatrix = await getMatrix(year, '', tenantParams);
         apiMatrix = firstMatrix.matrix || {};
         const refs = firstMatrix.references || { clients: [], products: [] };
         if (refs.clients.length > 0 || refs.products.length > 0) {
@@ -264,33 +264,20 @@ export default function ClientPaymentsPage() {
 
       setClients(finalClients);
       setProducts(finalProducts);
-      if (!finalProducts.find((p) => p.id === productId)) {
-        setActiveProductId(finalProducts[0]?.id ?? '');
-      } else {
-        setActiveProductId(productId);
-      }
-
-      const targetProductId = finalProducts.find((p) => p.id === productId)
-        ? productId
-        : (finalProducts[0]?.id ?? productId);
-
-      if (Object.keys(apiMatrix || {}).length === 0 && productId && productId !== targetProductId) {
-        try {
-          const res = await getMatrix(year, targetProductId, tenantParams);
-          apiMatrix = res.matrix || {};
-        } catch {
-          apiMatrix = {};
+      if (finalProducts.length > 0) {
+        const existingActiveValid = !!finalProducts.find((p) => p.id === activeProductId);
+        if (!existingActiveValid) {
+          setActiveProductId(finalProducts[0].id);
         }
       }
 
       setIsOffline(Object.keys(apiMatrix || {}).length === 0 && import.meta.env.DEV);
       if (Object.keys(apiMatrix || {}).length > 0) {
-        setMatrix((prev) => ({ ...(prev || {}), ...apiMatrix }));
+        setMatrix(apiMatrix);
       } else if (import.meta.env.DEV && finalClients.length > 0 && finalProducts.length > 0) {
-        const seed = generateSeedMatrix(finalClients, finalProducts, year);
-        setMatrix((prev) => ({ ...(prev || {}), ...seed }));
+        setMatrix(generateSeedMatrix(finalClients, finalProducts, year));
       } else {
-        setMatrix((prev) => ({ ...(prev || {}) }));
+        setMatrix({});
       }
     } catch {
       if (import.meta.env.DEV) {
@@ -347,15 +334,9 @@ export default function ClientPaymentsPage() {
   }
 
   useEffect(() => {
-    loadAll(currentYear, '');
+    loadAll(currentYear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentYear]);
-
-  useEffect(() => {
-    if (products.length === 0 || !activeProductId) return;
-    loadMatrixOnly(currentYear, activeProductId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentYear, activeProductId]);
 
   function handlePrevYear() {
     setCurrentYear((y) => y - 1);
