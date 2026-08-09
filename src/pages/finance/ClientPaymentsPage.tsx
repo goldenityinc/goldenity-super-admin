@@ -309,31 +309,6 @@ export default function ClientPaymentsPage() {
     }
   }
 
-  async function loadMatrixOnly(year: number, productId: string) {
-    if (!productId) return;
-    setIsLoading(true);
-    try {
-      const tenantParams = isSuperAdmin ? { tenantId: GLOBAL_FINANCE_MATRIX_TENANT_ID } : undefined;
-      const { matrix: apiMatrix } = await getMatrix(year, productId, tenantParams);
-      setIsOffline(false);
-      setMatrix((prev) => ({ ...(prev || {}), ...(apiMatrix || {}) }));
-    } catch {
-      if (import.meta.env.DEV) {
-        toast.warning(
-          'Gagal ambil data dari server, pakai data demo offline'
-        );
-        const seed = generateSeedMatrix(clients, products, year);
-        setMatrix((prev) => ({ ...(prev || {}), ...seed }));
-        setIsOffline(true);
-      } else {
-        setIsOffline(false);
-        toast.error('Gagal memuat data matrix tahun ini, hubungi admin.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
   useEffect(() => {
     loadAll(currentYear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
