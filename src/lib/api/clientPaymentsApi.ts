@@ -145,6 +145,7 @@ export async function getMatrix(
     params: queryParams,
   });
   const body = toRecord(response.data);
+  const rawBodyData = response?.data?.data ?? response?.data;
   const data = toRecord(body.data ?? body);
   const rawReferences = toRecord(body.references ?? data.references);
 
@@ -166,12 +167,13 @@ export async function getMatrix(
     };
   }
 
-  const flatRecords = toArray(data);
-  if (flatRecords.length > 0 && Object.keys(matrix).length === 0) {
+  const inlineRecords = Array.isArray(rawBodyData) ? rawBodyData : [];
+  const flatRecords = toArray(data).length > 0 ? toArray(data) : inlineRecords;
+  if (flatRecords.length > 0) {
     for (const item of flatRecords) {
       const row = toRecord(item);
       const rawStatus = row.status ?? row.payment_status;
-      const clientId = toStringValue(row.client_id ?? row.clientId ?? row.customer_id ?? row.customerId);
+      const clientId = toStringValue(row.client_id ?? row.clientId ?? row.customer_id ?? row.customerId ?? row.original_client_id);
       const productId = toStringValue(row.product_id ?? row.productId ?? row.item_id ?? row.itemId);
       const periodMonth = toNumberValue(row.period_month ?? row.periodMonth ?? row.month, 0);
       const periodYear = toNumberValue(row.period_year ?? row.periodYear ?? row.year, 0);
