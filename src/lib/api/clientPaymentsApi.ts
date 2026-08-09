@@ -131,7 +131,7 @@ export async function listClientsAndProducts(params?: { tenantId?: string }): Pr
 
 export async function getMatrix(
   year: number,
-  productId: string,
+  productId?: string,
   params?: { tenantId?: string }
 ): Promise<{
   matrix: Record<string, CellPayment>;
@@ -139,7 +139,8 @@ export async function getMatrix(
   months: number[];
   references: { clients: Client[]; products: Product[] };
 }> {
-  const queryParams: any = { year, productId };
+  const queryParams: any = { year };
+  if (productId) queryParams.productId = productId;
   if (params?.tenantId) queryParams.tenantId = params.tenantId;
   const response = await httpClient.get('/v1/client-payments/matrix', {
     params: queryParams,

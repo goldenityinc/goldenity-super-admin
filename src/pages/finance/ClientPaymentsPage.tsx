@@ -199,7 +199,7 @@ export default function ClientPaymentsPage() {
       const tenantParams = isSuperAdmin ? { tenantId: GLOBAL_FINANCE_MATRIX_TENANT_ID } : undefined;
 
       try {
-        const firstMatrix = await getMatrix(year, '', tenantParams);
+        const firstMatrix = await getMatrix(year, undefined, tenantParams);
         apiMatrix = firstMatrix.matrix || {};
         const refs = firstMatrix.references || { clients: [], products: [] };
         if (refs.clients.length > 0 || refs.products.length > 0) {
