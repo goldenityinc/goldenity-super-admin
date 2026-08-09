@@ -173,7 +173,14 @@ export async function getMatrix(
     for (const item of flatRecords) {
       const row = toRecord(item);
       const rawStatus = row.status ?? row.payment_status;
-      const clientId = toStringValue(row.client_id ?? row.clientId ?? row.customer_id ?? row.customerId ?? row.original_client_id);
+      const rawClientId = (
+        (typeof row.original_client_id === 'string' && row.original_client_id.trim()) ? row.original_client_id : null
+      ) ?? (
+        (typeof row.clientId === 'string' && row.clientId.trim() && /^[0-9a-fA-F-]{8,}$/.test(row.clientId)) ? row.clientId : null
+      ) ?? (
+        (typeof row.client_id === 'string' && row.client_id.trim() && /^[0-9a-fA-F-]{8,}$/.test(row.client_id)) ? row.client_id : null
+      ) ?? String(row.customer_id ?? row.customerId ?? row.clientId ?? row.client_id ?? '').trim();
+      const clientId = toStringValue(rawClientId);
       const productId = toStringValue(row.product_id ?? row.productId ?? row.item_id ?? row.itemId);
       const periodMonth = toNumberValue(row.period_month ?? row.periodMonth ?? row.month, 0);
       const periodYear = toNumberValue(row.period_year ?? row.periodYear ?? row.year, 0);
