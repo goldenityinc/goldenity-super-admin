@@ -154,3 +154,13 @@ export async function togglePaymentStatus(
   const body = toRecord(response.data);
   return normalizeExpense(body.data ?? body);
 }
+
+export async function deleteExpense(
+  id: string,
+  params?: { tenantId?: string }
+): Promise<void> {
+  if (!id) throw new Error('ID pengeluaran tidak boleh kosong');
+  await httpClient.delete(`/v1/expenses/${encodeURIComponent(id)}`, {
+    params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
+  });
+}

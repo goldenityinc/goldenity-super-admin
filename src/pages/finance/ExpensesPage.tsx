@@ -33,6 +33,7 @@ import {
   createExpense,
   updateExpense,
   togglePaymentStatus,
+  deleteExpense,
   type Expense,
   type ExpenseStatus,
 } from '../../lib/api/expenseApi';
@@ -342,6 +343,21 @@ export default function ExpensesPage() {
       toast.success('Status diperbarui');
     } catch (err: unknown) {
       toast.error('Gagal memperbarui status: ' + getApiErrorMessage(err));
+    }
+  };
+
+  const handleDeleteExpense = async (row: Expense) => {
+    if (!row?.id) return;
+    const confirmMsg = `Hapus permanen pengeluaran "${row.name ?? '-'} — ${formatCurrencyIDR(row.amountIDR ?? 0)} (${formatDateID(row.dateISO)})"?\n\nTindakan ini tidak bisa dibatalkan.`;
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await deleteExpense(row.id);
+      setExpenses((prev) => prev.filter((e) => e.id !== row.id));
+      toast.success('Pengeluaran berhasil dihapus permanen.');
+      if (viewingExpense?.id === row.id) closeViewModal();
+      if (editingId === row.id) closeModal();
+    } catch (err: unknown) {
+      toast.error('Gagal menghapus pengeluaran: ' + getApiErrorMessage(err));
     }
   };
 
@@ -733,6 +749,15 @@ export default function ExpensesPage() {
                     <Pencil className="h-3.5 w-3.5" />
                     Edit
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteExpense(row)}
+                    title="Hapus pengeluaran ini permanen"
+                    className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Hapus
+                  </button>
                   {row.status === 'Paid' ? (
                     <button
                       type="button"
@@ -935,27 +960,45 @@ export default function ExpensesPage() {
             ) : null}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={closeModal}
-              disabled={submitting}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-70"
-            >
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              {modalMode === 'create' ? 'Simpan' : 'Simpan Perubahan'}
-            </button>
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+            {modalMode === 'edit' && editingId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const row = expenses.find((e) => e.id === editingId);
+                  if (row) handleDeleteExpense(row);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                disabled={submitting}
+              >
+                <Trash2 className="h-4 w-4" />
+                Hapus Pengeluaran
+              </button>
+            ) : (
+              <div />
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={submitting}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-70"
+              >
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+                {modalMode === 'create' ? 'Simpan' : 'Simpan Perubahan'}
+              </button>
+            </div>
           </div>
         </form>
       </Modal>

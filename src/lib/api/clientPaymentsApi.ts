@@ -299,3 +299,38 @@ export async function upsertCell(payload: UpsertCellPayload): Promise<CellPaymen
     notes: toStringValue(data.notes ?? data.note ?? payload.notes ?? '', '') || undefined,
   };
 }
+
+export type DeleteCellPayload = {
+  clientId: string;
+  productId: string;
+  periodMonth: number;
+  periodYear: number;
+  tenantId?: string;
+};
+
+export async function deleteClientPaymentCell(payload: DeleteCellPayload): Promise<void> {
+  if (!payload.clientId || !payload.productId) {
+    throw new Error('clientId & productId diperlukan untuk delete cell');
+  }
+  if (payload.periodMonth < 1 || payload.periodMonth > 12) {
+    throw new Error('periodMonth harus 1-12');
+  }
+  if (!payload.periodYear || payload.periodYear < 1900) {
+    throw new Error('periodYear tidak valid');
+  }
+  const queryParams: Record<string, string> = {};
+  if (payload.tenantId) queryParams.tenantId = payload.tenantId;
+
+  const body = {
+    clientId: payload.clientId,
+    productId: payload.productId,
+    periodMonth: payload.periodMonth,
+    periodYear: payload.periodYear,
+    ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
+  };
+
+  await httpClient.delete('/v1/client-payments/cell', {
+    data: body,
+    params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+  });
+}

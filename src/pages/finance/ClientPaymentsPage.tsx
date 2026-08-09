@@ -26,6 +26,7 @@ import {
 import {
   getMatrix,
   upsertCell,
+  deleteClientPaymentCell,
   matrixKey,
   listClientsAndProducts,
   type Client,
@@ -545,6 +546,52 @@ export default function ClientPaymentsPage() {
     }
   }
 
+  async function handleDeleteCell() {
+    if (!editingCellKey || !editModal.clientId || editModal.monthIdx === null) return;
+    const existing = matrix[editingCellKey];
+    if (!existing) {
+      toast.warning('Tidak ada record untuk dihapus di cell ini.');
+      return;
+    }
+    const clientName = clients.find((c) => c.id === editModal.clientId)?.name ?? '-';
+    const monthLabel = MONTH_LABELS_ID[editModal.monthIdx] ?? `Bulan ${editModal.monthIdx + 1}`;
+    const confirmMsg = `Hapus permanen record pembayaran ini?\n\nClient: ${clientName}\nProduk: ${activeProduct.name ?? '-'} (${activeProductId.slice(0, 8)}...)\nPeriode: ${monthLabel} ${currentYear}\nNominal: ${formatCurrencyIDR(existing.amountIDR ?? 0)} [${existing.status}]\n\nTindakan ini tidak bisa dibatalkan.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    if (isOffline) {
+      setMatrix((prev) => {
+        const next = { ...(prev || {}) };
+        delete next[editingCellKey];
+        return next;
+      });
+      toast.success('Record pembayaran dihapus (offline).');
+      closeEditModal();
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await deleteClientPaymentCell({
+        clientId: editModal.clientId,
+        productId: activeProductId,
+        periodMonth: editModal.monthIdx + 1,
+        periodYear: currentYear,
+        ...(isSuperAdmin ? { tenantId: GLOBAL_FINANCE_MATRIX_TENANT_ID } : {}),
+      });
+      setMatrix((prev) => {
+        const next = { ...(prev || {}) };
+        delete next[editingCellKey];
+        return next;
+      });
+      toast.success('Record pembayaran berhasil dihapus permanen.');
+      closeEditModal();
+    } catch {
+      toast.error('Gagal menghapus record. Coba lagi.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   if (isLoading && products.length === 0) {
     return (
       <div className="space-y-5">
@@ -896,27 +943,42 @@ export default function ClientPaymentsPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-6 mt-6 border-t border-slate-200">
-          <button
-            type="button"
-            onClick={closeEditModal}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition-colors inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
-            {isSaving ? 'Menyimpan...' : 'Simpan'}
-          </button>
+        <div className="flex items-center justify-between gap-2 pt-6 mt-6 border-t border-slate-200">
+          {editingCellKey && matrix[editingCellKey] ? (
+            <button
+              type="button"
+              onClick={handleDeleteCell}
+              disabled={isSaving}
+              className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 shadow-sm hover:bg-red-100 transition-colors inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="h-4 w-4" />
+              {isSaving ? 'Proses...' : 'Hapus Record'}
+            </button>
+          ) : (
+            <div />
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeEditModal}
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 transition-colors inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              {isSaving ? 'Menyimpan...' : 'Simpan'}
+            </button>
+          </div>
         </div>
       </Modal>
     </div>
