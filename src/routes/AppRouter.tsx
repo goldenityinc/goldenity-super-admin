@@ -18,6 +18,7 @@ const PreOrdersPage = lazy(() => import('../pages/sales/PreOrdersPage'));
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const UnauthorizedPage = lazy(() => import('../pages/auth/UnauthorizedPage'));
 const ExpensesPage = lazy(() => import('../pages/finance/ExpensesPage'));
+const IncomesPage = lazy(() => import('../pages/finance/IncomesPage'));
 const ClientPaymentsPage = lazy(() => import('../pages/finance/ClientPaymentsPage'));
 
 function RouteLoader() {
@@ -80,6 +81,7 @@ export default function AppRouter() {
         <Route path="downloads" element={withSuspense(<DownloadsPage />)} />
         <Route path="sales/pre-orders" element={withSuspense(<PreOrdersPage />)} />
         <Route path="finance/expenses" element={withSuspense(<ExpensesPage />)} />
+        <Route path="finance/incomes" element={withSuspense(<IncomesPage />)} />
         <Route path="finance/client-payments" element={withSuspense(<ClientPaymentsPage />)} />
       </Route>
 

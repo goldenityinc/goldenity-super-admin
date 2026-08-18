@@ -15,6 +15,7 @@ import {
   Wallet,
   FileText,
   CreditCard,
+  TrendingUp,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentType } from 'react';
@@ -66,6 +67,7 @@ const menuSections: SidebarSection[] = [
         label: 'Finance',
         icon: Wallet,
         children: [
+          { to: '/dashboard/finance/incomes', label: 'Incomes', icon: TrendingUp },
           { to: '/dashboard/finance/expenses', label: 'Expenses', icon: FileText },
           { to: '/dashboard/finance/client-payments', label: 'Client Payment', icon: CreditCard },
         ],

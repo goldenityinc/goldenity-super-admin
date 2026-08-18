@@ -1,0 +1,166 @@
+import httpClient from './httpClient';
+
+export type IncomeStatus = 'Paid' | 'Not Paid';
+
+export type Income = {
+  id: string;
+  name: string;
+  dateISO: string;
+  picName: string;
+  status: IncomeStatus;
+  description: string;
+  amountIDR: number;
+  category: string;
+  proofImages: string[];
+};
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function toStringValue(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return fallback;
+}
+
+function toNumberValue(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[,_\s]/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+function toArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return [];
+}
+
+function normalizePaymentStatus(value: unknown): IncomeStatus {
+  const str = toStringValue(value);
+  if (str === 'Paid' || str === 'PAID' || str === 'paid') {
+    return 'Paid';
+  }
+  if (str === 'NotPaid' || str === 'NOT_PAID' || str === 'not_paid' || str === 'Unpaid') {
+    return 'Not Paid';
+  }
+  return str === 'Not Paid' ? 'Not Paid' : 'Paid';
+}
+
+function mapToApiPaymentStatus(status: IncomeStatus): 'Paid' | 'NotPaid' {
+  return status === 'Paid' ? 'Paid' : 'NotPaid';
+}
+
+function normalizeProofImages(value: unknown): string[] {
+  const arr = toArray(value);
+  return arr
+    .map((item) => {
+      const row = toRecord(item);
+      const url = toStringValue(row.url ?? row.file_url ?? row.image_url ?? row.attachment_url ?? row.path);
+      return typeof item === 'string' ? item : url;
+    })
+    .filter(Boolean);
+}
+
+function normalizeIncome(value: unknown): Income {
+  const row = toRecord(value);
+  return {
+    id: toStringValue(row.id),
+    name: toStringValue(row.title ?? row.name ?? row.income_name, '-'),
+    dateISO: toStringValue(row.income_date ?? row.dateISO ?? row.date ?? row.date_iso, ''),
+    picName: toStringValue(row.pic_name ?? row.picName ?? row.pic ?? row.person_in_charge, ''),
+    status: normalizePaymentStatus(row.payment_status ?? row.status),
+    description: toStringValue(row.notes ?? row.description ?? row.desc, ''),
+    amountIDR: toNumberValue(row.amount ?? row.amountIDR ?? row.total_amount ?? row.total, 0),
+    category: toStringValue(row.category ?? row.income_category, ''),
+    proofImages: normalizeProofImages(row.attachments ?? row.proofImages ?? row.proof_images ?? row.files),
+  };
+}
+
+function extractListItems(payload: unknown): unknown[] {
+  const body = toRecord(payload);
+  const dataNode = body.data;
+  if (Array.isArray(dataNode)) {
+    return dataNode;
+  }
+  const dataRecord = toRecord(dataNode);
+  return toArray(dataRecord.items ?? body.items ?? dataRecord.data);
+}
+
+export async function listIncomes(params?: { search?: string; startDate?: string; endDate?: string; category?: string; status?: string; payment_status?: string; tenantId?: string }): Promise<Income[]> {
+  const queryParams: any = {};
+  if (params?.search) queryParams.search = params.search;
+  if (params?.startDate) queryParams.startDate = params.startDate;
+  if (params?.endDate) queryParams.endDate = params.endDate;
+  if (params?.category) queryParams.category = params.category;
+  if (params?.status) queryParams.status = params.status;
+  if (params?.payment_status) queryParams.payment_status = params.payment_status;
+  if (params?.tenantId) queryParams.tenantId = params.tenantId;
+  const response = await httpClient.get('/v1/incomes', { params: queryParams });
+  const items = extractListItems(response.data);
+  return items.map(normalizeIncome);
+}
+
+export async function createIncome(fd: FormData, params?: { tenantId?: string }): Promise<Income> {
+  const response = await httpClient.post('/v1/incomes', fd, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
+  });
+  const body = toRecord(response.data);
+  return normalizeIncome(body.data ?? body);
+}
+
+export async function updateIncome(id: string, fd: FormData, params?: { tenantId?: string }): Promise<Income> {
+  const response = await httpClient.put(`/v1/incomes/${encodeURIComponent(id)}`, fd, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
+  });
+  const body = toRecord(response.data);
+  return normalizeIncome(body.data ?? body);
+}
+
+export async function togglePaymentStatus(
+  id: string,
+  newStatus: IncomeStatus,
+  params?: { tenantId?: string }
+): Promise<Income> {
+  const response = await httpClient.patch(
+    `/v1/incomes/${encodeURIComponent(id)}/payment-status`,
+    {
+      payment_status: mapToApiPaymentStatus(newStatus),
+    },
+    {
+      params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
+    }
+  );
+  const body = toRecord(response.data);
+  return normalizeIncome(body.data ?? body);
+}
+
+export async function deleteIncome(
+  id: string,
+  params?: { tenantId?: string }
+): Promise<void> {
+  if (!id) throw new Error('ID pemasukan tidak boleh kosong');
+  await httpClient.delete(`/v1/incomes/${encodeURIComponent(id)}`, {
+    params: params?.tenantId ? { tenantId: params.tenantId } : undefined,
+  });
+}
