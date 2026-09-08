@@ -18,6 +18,14 @@ import TableSkeleton from '../../components/common/TableSkeleton';
 import Modal from '../../components/common/Modal';
 import TenantDetailModal from '../../components/tenants/TenantDetailModal';
 
+type BusinessCategory = 'GENERAL' | 'RETAIL_FNB' | 'SERVICES_AUTOMOTIVE';
+
+const BUSINESS_CATEGORY_OPTIONS: { value: BusinessCategory; label: string }[] = [
+  { value: 'RETAIL_FNB', label: 'Retail & F&B' },
+  { value: 'SERVICES_AUTOMOTIVE', label: 'Jasa & Bengkel' },
+  { value: 'GENERAL', label: 'Umum' },
+];
+
 type TenantFormState = {
   name: string;
   slug: string;
@@ -25,6 +33,7 @@ type TenantFormState = {
   phone: string;
   firstBranchName: string;
   address: string;
+  businessCategory: BusinessCategory;
   logoFile: File | null;
 };
 
@@ -35,6 +44,7 @@ const initialForm: TenantFormState = {
   phone: '',
   firstBranchName: '',
   address: '',
+  businessCategory: 'RETAIL_FNB',
   logoFile: null,
 };
 
@@ -117,6 +127,7 @@ export default function TenantsPage() {
         phone: form.phone || undefined,
         firstBranchName: form.firstBranchName || undefined,
         address: form.address || undefined,
+        businessCategory: form.businessCategory,
       });
 
       if (form.logoFile) {
@@ -160,6 +171,7 @@ export default function TenantsPage() {
       phone: tenant.phone ?? '',
       firstBranchName: '',
       address: tenant.address ?? '',
+      businessCategory: (tenant.businessCategory as BusinessCategory) ?? 'RETAIL_FNB',
       logoFile: null,
     });
     setIsEditOpen(true);
@@ -198,6 +210,7 @@ export default function TenantsPage() {
         email: editForm.email || null,
         phone: editForm.phone || null,
         address: editForm.address || null,
+        businessCategory: editForm.businessCategory,
         isActive: editIsActive,
       });
 
@@ -277,6 +290,22 @@ export default function TenantsPage() {
               placeholder="Opsional, contoh: Cabang Pusat"
               className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
             />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-sm font-medium text-slate-700">Kategori Bisnis</span>
+            <select
+              value={form.businessCategory}
+              onChange={(event) => updateField('businessCategory', event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+            >
+              {BUSINESS_CATEGORY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">Menentukan mode bisnis di POS &amp; Back Office tenant.</p>
           </label>
 
           <label className="space-y-1 md:col-span-2">
@@ -467,6 +496,21 @@ export default function TenantsPage() {
               >
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Kategori Bisnis</span>
+              <select
+                value={editForm.businessCategory}
+                onChange={(event) => updateEditField('businessCategory', event.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
+              >
+                {BUSINESS_CATEGORY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
             </label>
 
