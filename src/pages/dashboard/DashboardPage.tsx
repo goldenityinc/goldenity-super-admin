@@ -10,9 +10,179 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { getDashboardMetrics, type DashboardMetrics } from '../../lib/api/dashboardApi';
+import { Link } from 'react-router-dom';
+import {
+  getDashboardMetrics,
+  type DashboardBusinessMetrics,
+  type DashboardMetrics,
+} from '../../lib/api/dashboardApi';
+import { LEAD_STAGES } from '../../lib/api/leadApi';
+import { formatRupiah, formatRupiahShort } from '../../lib/constants/packageCatalog';
 import { getApiErrorMessage } from '../../lib/utils/apiError';
 import { toast } from 'sonner';
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+function KpiTile({
+  label,
+  value,
+  hint,
+  tone = 'default',
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  tone?: 'primary' | 'warning' | 'default';
+}) {
+  const toneClass =
+    tone === 'primary'
+      ? 'border-primary/40 bg-primary/5'
+      : tone === 'warning'
+        ? 'border-amber-300 bg-amber-50'
+        : 'border-slate-200 bg-white';
+  return (
+    <div className={`rounded-xl border p-4 shadow-sm ${toneClass}`}>
+      <p className="text-sm font-medium text-slate-600">{label}</p>
+      <p className="mt-1 text-3xl font-bold text-dark">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+function BusinessOverview({ business, loading }: { business?: DashboardBusinessMetrics; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="h-28 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!business) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
+        Metrik bisnis (outlet berbayar, MRR, pipeline) belum tersedia. Perbarui backend admin core ke versi yang punya
+        <code className="mx-1 rounded bg-slate-100 px-1">business</code>di <code className="rounded bg-slate-100 px-1">/dashboard/metrics</code>.
+      </div>
+    );
+  }
+
+  const stageCounts = LEAD_STAGES.map((stage) => ({
+    ...stage,
+    count: business.leads.byStage.find((row) => row.stage === stage.value)?.count ?? 0,
+  }));
+  const maxStage = Math.max(1, ...stageCounts.map((stage) => stage.count));
+  const attentionCount = business.expiredButActiveCount + business.payments.unpaidCount;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KpiTile
+          label="Outlet berbayar aktif"
+          value={business.activePaidOutlets}
+          hint={`${business.activePayingTenants} tenant dengan langganan aktif`}
+          tone="primary"
+        />
+        <KpiTile
+          label="Estimasi MRR"
+          value={formatRupiahShort(business.estimatedMrr)}
+          hint={`Harga daftar × outlet${business.customSubscriptions ? ` · ${business.customSubscriptions} langganan custom tidak dihitung` : ''}`}
+        />
+        <KpiTile
+          label="Akan habis ≤30 hari"
+          value={business.expiringSoonCount}
+          hint={business.expiredButActiveCount ? `${business.expiredButActiveCount} sudah lewat tapi masih aktif` : 'Hubungi untuk perpanjangan'}
+          tone={business.expiringSoonCount + business.expiredButActiveCount > 0 ? 'warning' : 'default'}
+        />
+        <KpiTile
+          label={`Belum lunas ${MONTH_NAMES[business.payments.periodMonth - 1]} ${business.payments.periodYear}`}
+          value={business.payments.unpaidCount}
+          hint={`${formatRupiah(business.payments.unpaidAmount)} belum masuk · ${formatRupiah(business.payments.paidAmount)} sudah lunas`}
+          tone={business.payments.unpaidCount > 0 ? 'warning' : 'default'}
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <h2 className="text-lg font-semibold text-dark">Pipeline lead</h2>
+            <Link to="/dashboard/sales/leads" className="text-sm font-medium text-primary hover:underline">
+              Buka pipeline
+            </Link>
+          </div>
+          <p className="mb-3 text-sm text-slate-600">
+            {business.leads.total} lead · {business.leads.newThisWeek} baru minggu ini ·{' '}
+            <span className={business.leads.dueFollowUps ? 'font-semibold text-amber-700' : ''}>
+              {business.leads.dueFollowUps} perlu ditindaklanjuti
+            </span>
+          </p>
+          <div className="space-y-2">
+            {stageCounts.map((stage) => (
+              <div key={stage.value} className="flex items-center gap-3 text-sm">
+                <span className="w-28 text-slate-600">{stage.label}</span>
+                <div className="h-3 flex-1 rounded bg-slate-100">
+                  <div
+                    className={`h-3 rounded ${stage.value === 'WON' ? 'bg-emerald-500' : stage.value === 'LOST' ? 'bg-rose-300' : 'bg-primary'}`}
+                    style={{ width: `${(stage.count / maxStage) * 100}%` }}
+                  />
+                </div>
+                <span className="w-12 text-right font-semibold text-dark">{stage.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <h2 className="text-lg font-semibold text-dark">Perlu perhatian</h2>
+            <span className="text-sm text-slate-500">{attentionCount} item</span>
+          </div>
+          {business.attention.length === 0 ? (
+            <p className="text-sm text-slate-500">Tidak ada langganan yang habis dalam 30 hari.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 text-sm">
+              {business.attention.map((item) => (
+                <li key={item.appInstanceId} className="flex items-center justify-between gap-3 py-2">
+                  <div>
+                    <p className="font-medium text-dark">{item.tenantName}</p>
+                    <p className="text-xs text-slate-500">
+                      {item.solutionName} · {item.packageLabel}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      item.reason === 'EXPIRED' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {item.reason === 'EXPIRED' ? 'Lewat' : 'Habis'}{' '}
+                    {item.endDate ? new Date(item.endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {business.packageBreakdown.length > 0 ? (
+            <div className="mt-4 border-t border-slate-100 pt-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Per paket</p>
+              <ul className="space-y-1 text-sm">
+                {business.packageBreakdown.map((row) => (
+                  <li key={row.packageLabel} className="flex justify-between gap-2">
+                    <span className="text-slate-700">
+                      {row.packageLabel} · {row.subscriptions} langganan · {row.outlets} outlet
+                    </span>
+                    <span className="font-medium text-dark">{formatRupiahShort(row.estimatedMrr)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type MetricCardProps = {
   icon: React.ReactNode;
@@ -101,6 +271,8 @@ export default function DashboardPage() {
           Ringkasan tenant dan performa langganan produk SaaS di control plane Goldenity.
         </p>
       </div>
+
+      <BusinessOverview business={metrics?.business} loading={loading} />
 
       {/* Metric Cards */}
       <div className="grid gap-4 md:grid-cols-3">

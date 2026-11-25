@@ -15,6 +15,7 @@ const AppInstancesPage = lazy(() => import('../pages/subscriptions/AppInstancesP
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
 const DownloadsPage = lazy(() => import('../pages/downloads/DownloadsPage'));
 const PreOrdersPage = lazy(() => import('../pages/sales/PreOrdersPage'));
+const LeadsPage = lazy(() => import('../pages/sales/LeadsPage'));
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 const UnauthorizedPage = lazy(() => import('../pages/auth/UnauthorizedPage'));
 const ExpensesPage = lazy(() => import('../pages/finance/ExpensesPage'));
@@ -80,6 +81,7 @@ export default function AppRouter() {
         <Route path="settings" element={withSuspense(<SettingsPage />)} />
         <Route path="downloads" element={withSuspense(<DownloadsPage />)} />
         <Route path="sales/pre-orders" element={withSuspense(<PreOrdersPage />)} />
+        <Route path="sales/leads" element={withSuspense(<LeadsPage />)} />
         <Route path="finance/expenses" element={withSuspense(<ExpensesPage />)} />
         <Route path="finance/incomes" element={withSuspense(<IncomesPage />)} />
         <Route path="finance/client-payments" element={withSuspense(<ClientPaymentsPage />)} />

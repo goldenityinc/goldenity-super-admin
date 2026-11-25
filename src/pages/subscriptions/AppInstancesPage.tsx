@@ -20,6 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { tierOptionLabel } from '../../lib/constants/packageCatalog';
 import {
   createAppInstance,
   deleteAppInstance,
@@ -1500,10 +1501,10 @@ export default function AppInstancesPage() {
                   onChange={(event) => onChangeField('tier', event.target.value)}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none ring-primary/30 focus:ring"
                 >
-                  <option value="Standard">Standard</option>
-                  <option value="Professional">Professional</option>
-                  <option value="Enterprise">Enterprise</option>
-                  <option value="Custom">Custom</option>
+                  <option value="Standard">{tierOptionLabel('Standard')}</option>
+                  <option value="Professional">{tierOptionLabel('Professional')}</option>
+                  <option value="Enterprise">{tierOptionLabel('Enterprise')}</option>
+                  <option value="Custom">{tierOptionLabel('Custom')}</option>
                 </select>
               </label>
             ) : null}
