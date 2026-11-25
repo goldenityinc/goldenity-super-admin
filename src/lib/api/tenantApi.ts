@@ -1,6 +1,13 @@
 import httpClient from './httpClient';
 
-export type BusinessCategory = 'GENERAL' | 'RETAIL_FNB' | 'SERVICES_AUTOMOTIVE';
+export type BusinessCategory =
+  | 'GENERAL'
+  | 'RETAIL_FNB'
+  | 'SERVICES_AUTOMOTIVE'
+  | 'BAKERY'
+  | 'CATERING'
+  | 'FLORIST'
+  | 'FROZEN_FOOD';
 
 export type TaxSettings = {
   enabled?: boolean | null;

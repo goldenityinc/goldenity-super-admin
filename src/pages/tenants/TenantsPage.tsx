@@ -18,13 +18,7 @@ import TableSkeleton from '../../components/common/TableSkeleton';
 import Modal from '../../components/common/Modal';
 import TenantDetailModal from '../../components/tenants/TenantDetailModal';
 
-type BusinessCategory = 'GENERAL' | 'RETAIL_FNB' | 'SERVICES_AUTOMOTIVE';
-
-const BUSINESS_CATEGORY_OPTIONS: { value: BusinessCategory; label: string }[] = [
-  { value: 'RETAIL_FNB', label: 'Retail & F&B' },
-  { value: 'SERVICES_AUTOMOTIVE', label: 'Jasa & Bengkel' },
-  { value: 'GENERAL', label: 'Umum' },
-];
+import { BUSINESS_CATEGORY_OPTIONS, type BusinessCategory } from '../../lib/constants/businessCategories';
 
 type TenantFormState = {
   name: string;

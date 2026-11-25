@@ -16,6 +16,7 @@ import {
   FileText,
   CreditCard,
   TrendingUp,
+  Target,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentType } from 'react';
@@ -49,6 +50,7 @@ const menuSections: SidebarSection[] = [
     title: 'General',
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: Home },
+      { to: '/dashboard/sales/leads', label: 'Lead & Pipeline', icon: Target },
       { to: '/dashboard/tenants', label: 'Tenants', icon: Building2 },
       { to: '/dashboard/subscriptions', label: 'Subscriptions', icon: Link2 },
       { to: '/dashboard/users', label: 'Users', icon: Users },
