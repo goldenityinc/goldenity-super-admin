@@ -1,79 +1,87 @@
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from 'firebase/auth';
-import type { IdTokenResult, User } from 'firebase/auth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AuthContext, type AuthContextValue } from './auth-context';
-import { auth } from '../lib/firebase/firebaseClient';
+import { AuthContext, type AdminUser, type AuthContextValue } from './auth-context';
+import httpClient from '../lib/api/httpClient';
+import {
+  AUTH_EXPIRED_EVENT,
+  clearStoredToken,
+  getStoredToken,
+  setStoredToken,
+} from '../lib/auth/tokenStore';
 
-function extractClaims(tokenResult: IdTokenResult | null) {
-  if (!tokenResult) {
-    return null;
-  }
+type ApiEnvelope<T> = { success?: boolean; data?: T; message?: string; error?: string };
 
-  return tokenResult.claims as Record<string, unknown>;
+async function fetchMe(): Promise<AdminUser> {
+  const res = await httpClient.get<ApiEnvelope<{ user: AdminUser }>>('/auth/admin/me');
+  const user = res.data?.data?.user;
+  if (!user) throw new Error('Profil tidak ditemukan');
+  return user;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [claims, setClaims] = useState<Record<string, unknown> | null>(null);
 
   const refreshClaims = useCallback(async () => {
-    if (!auth.currentUser) {
-      setClaims(null);
+    if (!getStoredToken()) {
+      setUser(null);
       return;
     }
-
-    const tokenResult = await auth.currentUser.getIdTokenResult(true);
-    setClaims(extractClaims(tokenResult));
+    try {
+      setUser(await fetchMe());
+    } catch {
+      clearStoredToken();
+      setUser(null);
+    }
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-
-      if (firebaseUser) {
-        const tokenResult = await firebaseUser.getIdTokenResult();
-        setClaims(extractClaims(tokenResult));
-      } else {
-        setClaims(null);
+    let cancelled = false;
+    (async () => {
+      if (getStoredToken()) {
+        try {
+          const me = await fetchMe();
+          if (!cancelled) setUser(me);
+        } catch {
+          clearStoredToken();
+          if (!cancelled) setUser(null);
+        }
       }
+      if (!cancelled) setLoading(false);
+    })();
 
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    const onExpired = () => setUser(null);
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       loading,
-      claims,
-      isSuperAdmin:
-        claims?.role === 'SUPER_ADMIN' ||
-        claims?.superAdmin === true ||
-        claims?.super_admin === true,
+      claims: user ? { role: user.role } : null,
+      isSuperAdmin: user?.role === 'SUPER_ADMIN',
       loginWithEmail: async (email: string, password: string) => {
-        await signInWithEmailAndPassword(auth, email, password);
+        const res = await httpClient.post<ApiEnvelope<{ token: string; user: AdminUser }>>('/auth/admin/login', {
+          email,
+          password,
+        });
+        const data = res.data?.data;
+        if (!data?.token || !data.user) throw new Error('Respons login tidak lengkap');
+        setStoredToken(data.token);
+        setUser(data.user);
       },
       logout: async () => {
-        await signOut(auth);
+        clearStoredToken();
+        setUser(null);
       },
-      getIdToken: async () => {
-        if (!auth.currentUser) {
-          return null;
-        }
-
-        return auth.currentUser.getIdToken();
-      },
+      getIdToken: async () => getStoredToken(),
       refreshClaims,
     }),
-    [user, loading, claims, refreshClaims]
+    [user, loading, refreshClaims]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
