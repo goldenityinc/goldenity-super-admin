@@ -21,8 +21,9 @@ export default function LoginPage() {
 
     try {
       await loginWithEmail(email, password);
-    } catch {
-      setError('Login gagal. Periksa email/password Firebase Anda.');
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: { error?: string; message?: string } } })?.response?.data;
+      setError(data?.error ?? data?.message ?? 'Login gagal. Periksa koneksi lalu coba lagi.');
     } finally {
       setSubmitting(false);
     }

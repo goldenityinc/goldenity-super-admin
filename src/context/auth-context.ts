@@ -1,8 +1,16 @@
 import { createContext } from 'react';
-import type { User } from 'firebase/auth';
+
+/** Profil Super Admin dari backend (GET /auth/admin/me). */
+export type AdminUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  tenantId: string;
+};
 
 export type AuthContextValue = {
-  user: User | null;
+  user: AdminUser | null;
   loading: boolean;
   claims: Record<string, unknown> | null;
   isSuperAdmin: boolean;

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { auth } from '../firebase/firebaseClient';
+import { getStoredToken, notifyAuthExpired } from '../auth/tokenStore';
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 const hasAbsoluteHttpUrl = /^https?:\/\//i.test(configuredBaseUrl ?? '');
@@ -61,8 +61,8 @@ const httpClient = axios.create({
   timeout: 15000,
 });
 
-httpClient.interceptors.request.use(async (config) => {
-  const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+httpClient.interceptors.request.use((config) => {
+  const token = getStoredToken();
 
   if (token) {
     config.headers = config.headers ?? {};
@@ -71,5 +71,22 @@ httpClient.interceptors.request.use(async (config) => {
 
   return config;
 });
+
+// Token kedaluwarsa / akun dinonaktifkan → keluar ke halaman login.
+// Permintaan login sendiri dikecualikan (401 di sana = password salah).
+httpClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = String(error?.config?.url ?? '');
+    if ((status === 401 || status === 403) && getStoredToken() && !url.includes('/auth/admin/login')) {
+      const message = String(error?.response?.data?.error ?? error?.response?.data?.message ?? '');
+      const isSessionProblem =
+        status === 401 || /deactivated|dinonaktifkan|login ulang|login again/i.test(message);
+      if (isSessionProblem) notifyAuthExpired();
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default httpClient;
